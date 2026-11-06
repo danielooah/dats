@@ -71,7 +71,6 @@ details>.inhalt{padding:0 14px 6px}
 .karte-liste b{display:block;font-size:17px}
 .banner{background:var(--card);border:1px solid var(--marke);border-radius:14px;padding:12px 14px;margin:0 0 12px}
 .leer{text-align:center;color:var(--leicht);padding:40px 10px}
-.uhr{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;margin:4px 0 8px}
 .fuss{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--bg);border-top:1px solid var(--rand);
   padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;gap:10px}
 .fuss .btn{flex:1}
@@ -167,11 +166,11 @@ function neuesGeraet(datum){return {uid:neueId(),bezeichnung:'',client_name:'',f
   notizen:'',router_admin:'',router_admin_pw:'',wlan_name:'',wlan_pw:'',ip_bereich:'',dhcp:'',portfreigaben:'',
   alt_bezeichnung:'',alt_sn:'',alt_datentraeger:'',alt_loeschmethode:'',alt_loeschdatum:'',alt_entsorgung:'',alt_uebergeben_an:'',alt_notiz:'',
   dom_beigetreten:false,dom_ou:'',dom_benutzer:'',domaene:'',netzlaufwerke:'',dns:'',vlan:'',firmware:'',config_gesichert:false,checkliste_name:'',checkliste:[],
-  software:[],konten:[],fotos:[],uhr:{summe:0,start:null}}}
+  software:[],konten:[],fotos:[]}}
 function neueEinrichtung(firma){const d=heute();return {uid:neueId(),kunde:'',firma:firma||'',datum:d,gast_wlan:false,gast_ssid:'',gast_pw:'',unterschrift:'',unterschrift_name:'',unterschrift_datum:'',geraete:[neuesGeraet(d)],geaendert:Date.now(),exportiert:0}}
 function vorlagen(){const v=ls('vorlagen');return v&&typeof v==='object'?v:JSON.parse(JSON.stringify(STANDARD_VORLAGEN))}
 
-let cur=null,curG=0,uhrTimer=null,speicherTimer=null;
+let cur=null,curG=0,speicherTimer=null;
 function speichern(){if(!cur)return;cur.geaendert=Date.now();clearTimeout(speicherTimer);
   speicherTimer=setTimeout(()=>sichern(cur).catch(()=>toast('Speichern nicht möglich')),300)}
 function sofortSpeichern(){if(!cur)return Promise.resolve();clearTimeout(speicherTimer);return sichern(cur)}
@@ -207,7 +206,7 @@ function listen(){const lst=(id,arr)=>h('datalist',{id},arr.map(o=>h('option',{v
 
 /* ---------- Ansicht: Liste ---------- */
 async function zeigeListe(){
-  stoppeUhr();cur=null;
+  cur=null;
   const liste=(await alle().catch(()=>[]))||[];
   liste.sort((a,b)=>(b.datum||'').localeCompare(a.datum||'')||b.geaendert-a.geaendert);
   const offen=liste.filter(e=>e.geaendert>(e.exportiert||0));
@@ -294,24 +293,11 @@ function einrLoeschen(){
 
 /* ---------- Ansicht: Gerät ---------- */
 function geraetZeichnen(){
-  stoppeUhr();
   const g=cur.geraete[curG];if(!g)return;
   const box=$('#dev');
   const dauerAnzeige=h('div',{class:'hinweis',id:'dauer',style:'font-weight:700;margin-bottom:8px'});
   const dauerAkt=()=>{const m=gDauer(g);dauerAnzeige.textContent=m!=null?'Dauer: '+dauerText(m)+(parseDauer(g.dauer)!=null?' (von Hand)':''):''};
   const titelAkt=()=>{chipsZeichnen()};
-  const uhrAnzeige=h('div',{class:'uhr',id:'uhr'},'00:00:00');
-  const startKnopf=h('button',{class:'btn primary'},'Start');
-  const sw=()=>{const e=(g.uhr.summe||0)+(g.uhr.start?(Date.now()-g.uhr.start)/1000:0);return e};
-  const uhrAkt=()=>{const s=Math.floor(sw());uhrAnzeige.textContent=[Math.floor(s/3600),Math.floor(s%3600/60),s%60].map(x=>String(x).padStart(2,'0')).join(':');
-    startKnopf.textContent=g.uhr.start?'Läuft …':(g.uhr.summe>0?'Weiter':'Start')};
-  startKnopf.onclick=()=>{if(!g.uhr.start){g.uhr.start=Date.now();speichern();uhrAkt();starteUhr(uhrAkt)}};
-  const pause=()=>{if(g.uhr.start){g.uhr.summe=sw();g.uhr.start=null;speichern();uhrAkt()}};
-  const stopp=()=>{const s=sw();g.uhr={summe:0,start:null};stoppeUhr();
-    if(s>0){const m=Math.max(1,Math.round(s/60));g.bis=jetztZeit();g.dauer=String(m);
-      if(!g.von){const d=new Date(Date.now()-s*1000);g.von=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
-      toast('Gestoppt: '+dauerText(m))}
-    speichern();geraetZeichnen()};
   const typ=auswahl('Gerätetyp',g,'typ',TYPEN,()=>{titelAkt();geraetZeichnen()});
   const istNetz=['Router','Firewall','Netzwerkgerät'].includes(g.typ);
   const ohneClient=['Router','Firewall','Telefonanlage','Netzwerkgerät','Drucker'].includes(g.typ);
@@ -395,9 +381,7 @@ function geraetZeichnen(){
         h('button',{class:'btn klein',onclick:()=>{g.von=jetztZeit();geraetZeichnen()}},'Von = jetzt'),
         h('button',{class:'btn klein',onclick:()=>{g.bis=jetztZeit();geraetZeichnen()}},'Bis = jetzt')),
       feld('Dauer von Hand (z. B. 1:30 oder 90)',g,'dauer',{on:dauerAkt,mode:'text'}),dauerAnzeige,
-      uhrAnzeige,h('div',{class:'row',style:'margin-bottom:12px'},startKnopf,
-        h('button',{class:'btn',onclick:pause},'Pause'),h('button',{class:'btn',onclick:stopp},'Stopp')),
-      h('div',{class:'hinweis'},'Stopp trägt „Bis“ ein und übernimmt die gemessene Zeit als Dauer.')],false),
+      ],false),
     bereich('Konfiguration',[
       auswahl('Stand',g,'grundkonfig',KONFIG),haken('NinjaOne installiert',g,'ninjaone'),haken('ESET installiert',g,'eset'),
       feld('Was wurde konfiguriert?',g,'grundkonfig_notiz',{area:true})],false),
@@ -430,10 +414,8 @@ function geraetZeichnen(){
     bereich('Notizen',[feld('Notizen',g,'notizen',{area:true,rows:4})],false),
     h('div',{class:'row',style:'margin-top:4px'},
       h('button',{class:'btn klein danger',onclick:geraetEntfernen},'Dieses Gerät entfernen')));
-  dauerAkt();uhrAkt();if(g.uhr.start)starteUhr(uhrAkt)}
+  dauerAkt()}
 
-function starteUhr(fn){stoppeUhr();uhrTimer=setInterval(fn,500)}
-function stoppeUhr(){if(uhrTimer){clearInterval(uhrTimer);uhrTimer=null}}
 
 /* ---------- Fotos ---------- */
 function bildLaden(datei){return new Promise((res,rej)=>{const u=URL.createObjectURL(datei);const i=new Image();
@@ -460,8 +442,6 @@ function dateiName(e){const s=t=>String(t||'').normalize('NFKD').replace(/[^\w\-
   return 'Einrichtung_'+s(e.firma)+'_'+(e.datum||heute())+'.json'}
 async function exportieren(){
   if(!cur.firma.trim()||!cur.kunde.trim()){toast('Bitte Kunde und Firma eintragen');return}
-  const pausiert=cur.geraete.find(g=>g.uhr&&g.uhr.start);
-  if(pausiert&&!confirm('Eine Stoppuhr läuft noch. Trotzdem exportieren?'))return;
   const name=dateiName(cur);
   const blob=new Blob([JSON.stringify(exportObjekt(cur))],{type:'application/json'});
   cur.exportiert=Date.now();cur.geaendert=Math.min(cur.geaendert,cur.exportiert);await sofortSpeichern();
@@ -476,7 +456,7 @@ async function dateienEinlesen(ev){
       const e=o.einrichtung;const vorh=((await alle())||[]).find(x=>x.uid===e.uid);
       if(vorh&&!confirm('„'+(e.firma||'ohne Firma')+'“ ist schon auf diesem Handy. Überschreiben?'))continue;
       await sichern({uid:e.uid,kunde:e.kunde||'',firma:e.firma||'',datum:e.datum||heute(),gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',unterschrift:e.unterschrift||'',unterschrift_name:e.unterschrift_name||'',unterschrift_datum:e.unterschrift_datum||'',geaendert:Date.now(),exportiert:Date.now(),
-        geraete:(e.geraete||[]).map(g=>Object.assign(neuesGeraet(e.datum||heute()),g,{uhr:{summe:0,start:null},
+        geraete:(e.geraete||[]).map(g=>Object.assign(neuesGeraet(e.datum||heute()),g,{
           software:g.software||[],konten:g.konten||[],fotos:g.fotos||[],checkliste:g.checkliste||[]}))});n++}
     catch(err){toast('„'+d.name+'“ nicht lesbar')}}
   if(n>0)toast(n+' Einrichtung(en) geladen');zeigeListe()}
@@ -549,7 +529,7 @@ function mitTelLinks(text){
       teile.push(h('a',{href:'tel:'+ziffern,style:'color:var(--text);font-weight:700'},m[0]));ende=m.index+m[0].length}
     teile.push(z.slice(ende));return h('div',{},teile)})}
 function zeigeFirmen(){
-  stoppeUhr();cur=null;
+  cur=null;
   try{history.pushState({v:'firmen'},'','#firmen')}catch(e){}
   const liste=document.createElement('div');
   const suche=h('input',{type:'search',placeholder:'Firma, Person oder Nummer suchen …',autocomplete:'off',id:'firmensuche'});
