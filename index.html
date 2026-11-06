@@ -98,7 +98,17 @@ const KONTO_ARTEN=['E-Mail','Programm/App','Benutzer','Sonstiges'];
 const KONTO_TYPEN=['Lokal','Administrator','Domäne','Microsoft 365','Microsoft-Konto','Exchange','IMAP','POP3','Apple-ID','Google-Konto','Sonstiges'];
 const STANDARD_VORLAGEN={'Standard-Arbeitsplatz':['Microsoft 365 Apps','Google Chrome','Mozilla Firefox','Adobe Acrobat Reader','7-Zip','NinjaOne Agent','ESET Endpoint Security'],'Server':['NinjaOne Agent','ESET Server Security','7-Zip']};
 const UEBERNEHMEN=['typ','art','eingerichtet_von','grundkonfig','grundkonfig_notiz','ninjaone','eset','software','fern_tool','wlan'];
-const FELDER=['bezeichnung','client_name','fuer_wen','typ','art','eingerichtet_von','modell','entsperrcode','datum','von','bis','grundkonfig','grundkonfig_notiz','hostname','ip','wlan','fern_tool','fern_id','notizen','router_admin','router_admin_pw','wlan_name','wlan_pw','ip_bereich','dhcp','portfreigaben'];
+const ALT_DATENTRAEGER=['nicht ausgebaut / nicht relevant','ausgebaut und beim Kunden belassen','sicher gelöscht','physisch vernichtet'];
+const ALT_LOESCH=['Secure Erase (Hersteller-Tool)','DBAN / Überschreiben','Windows-Zurücksetzen (nur Datenträger neu aufgesetzt)','Löschen per Diskpart clean all','Mechanisch zerstört'];
+const ALT_ENTSORGUNG=['Mitgenommen zur Entsorgung','Entsorger / Wertstoffhof','Beim Kunden belassen','Weiterverwendet / verkauft'];
+const CHECKLISTEN={
+ 'Arbeitsplatz einrichten':['Hardware aufgebaut und angeschlossen','Windows installiert und aktiviert','Windows-Updates installiert','Treiber installiert','Gerätename vergeben','Domäne beigetreten','Benutzer angelegt und angemeldet','Netzlaufwerke eingebunden','Drucker eingerichtet','E-Mail eingerichtet','VPN eingerichtet','Standardsoftware installiert','NinjaOne-Agent installiert','ESET installiert','BitLocker aktiviert','Backup geprüft','Funktionstest durchgeführt','Übergabe an Benutzer erfolgt'],
+ 'Router tauschen':['Konfiguration des alten Routers gesichert','Neuer Router aufgestellt und angeschlossen','Firmware aktualisiert','Standard-Passwort geändert','Internetzugang eingerichtet','WLAN (SSID, Passwort) eingerichtet','Gäste-WLAN eingerichtet','DHCP / IP-Bereich eingerichtet','Portfreigaben eingerichtet','Internet getestet','Konfiguration des neuen Routers gesichert','Altgerät zurückgesetzt'],
+ 'Firewall installieren':['Alte Konfiguration gesichert','Firewall aufgestellt und angeschlossen','Firmware aktuell','Standard-Passwort geändert','Schnittstellen / VLANs konfiguriert','Regeln eingerichtet','VPN eingerichtet','Lizenz / Updates aktiviert','Funktionstest durchgeführt','Konfiguration gesichert','Logging / Monitoring geprüft'],
+ 'Altgerät austauschen':['Daten gesichert / übertragen','Programme und Konten dokumentiert','Domäne verlassen / Konto bereinigt','Datenträger sicher gelöscht','Altgerät vom Netz genommen','Altgerät zur Entsorgung übergeben','Lizenzen freigegeben']};
+const ALT_FELDER=['alt_bezeichnung','alt_sn','alt_datentraeger','alt_loeschmethode','alt_loeschdatum','alt_entsorgung','alt_uebergeben_an','alt_notiz'];
+const FELDER=['bezeichnung','client_name','fuer_wen','typ','art','eingerichtet_von','modell','entsperrcode','datum','von','bis','grundkonfig','grundkonfig_notiz','hostname','ip','wlan','fern_tool','fern_id','notizen','router_admin','router_admin_pw','wlan_name','wlan_pw','ip_bereich','dhcp','portfreigaben',...ALT_FELDER,'dom_ou','dom_benutzer','netzlaufwerke','dns','vlan','firmware','checkliste_name','domaene'];
+const HAKEN=['ninjaone','eset','dom_beigetreten','config_gesichert'];
 
 /* ---------- Hilfen ---------- */
 const $=s=>document.querySelector(s);
@@ -155,8 +165,10 @@ function neuesGeraet(datum){return {uid:neueId(),bezeichnung:'',client_name:'',f
   eingerichtet_von:ls('eingerichtet_von')||'',modell:'',entsperrcode:'',datum:datum,von:'',bis:'',dauer:'',
   grundkonfig:KONFIG[0],grundkonfig_notiz:'',ninjaone:false,eset:false,hostname:'',ip:'',wlan:'',fern_tool:'',fern_id:'',
   notizen:'',router_admin:'',router_admin_pw:'',wlan_name:'',wlan_pw:'',ip_bereich:'',dhcp:'',portfreigaben:'',
+  alt_bezeichnung:'',alt_sn:'',alt_datentraeger:'',alt_loeschmethode:'',alt_loeschdatum:'',alt_entsorgung:'',alt_uebergeben_an:'',alt_notiz:'',
+  dom_beigetreten:false,dom_ou:'',dom_benutzer:'',domaene:'',netzlaufwerke:'',dns:'',vlan:'',firmware:'',config_gesichert:false,checkliste_name:'',checkliste:[],
   software:[],konten:[],fotos:[],uhr:{summe:0,start:null}}}
-function neueEinrichtung(){const d=heute();return {uid:neueId(),kunde:'',firma:'',datum:d,gast_wlan:false,gast_ssid:'',gast_pw:'',geraete:[neuesGeraet(d)],geaendert:Date.now(),exportiert:0}}
+function neueEinrichtung(firma){const d=heute();return {uid:neueId(),kunde:'',firma:firma||'',datum:d,gast_wlan:false,gast_ssid:'',gast_pw:'',unterschrift:'',unterschrift_name:'',unterschrift_datum:'',geraete:[neuesGeraet(d)],geaendert:Date.now(),exportiert:0}}
 function vorlagen(){const v=ls('vorlagen');return v&&typeof v==='object'?v:JSON.parse(JSON.stringify(STANDARD_VORLAGEN))}
 
 let cur=null,curG=0,uhrTimer=null,speicherTimer=null;
@@ -174,6 +186,7 @@ function feld(label,obj,key,o={}){const id='f'+(++zaehler);
   let fuss=inp;
   if(o.secret){inp.type='password';
     fuss=h('div',{class:'secret'},inp,h('button',{type:'button',class:'btn klein',onclick:()=>{inp.type=inp.type==='password'?'text':'password'}},ikon('auge')))}
+  if(o.scan){fuss=h('div',{class:'secret'},inp,h('button',{type:'button',class:'btn klein',onclick:()=>scanStarten(inp)},'Scan'))}
   if(o.jetzt){fuss=h('div',{class:'secret'},inp,h('button',{type:'button',class:'btn klein',onclick:()=>{inp.value=jetztZeit();inp.dispatchEvent(new Event('input'))}},'Jetzt'))}
   return h('div',{class:'field'},h('label',{for:id},label),fuss)}
 function auswahl(label,obj,key,opts,on){const id='f'+(++zaehler);
@@ -190,7 +203,7 @@ function bereich(titel,kinder,offen){const d=h('details',{},h('summary',{},titel
   d.open=titel in offenMerk?offenMerk[titel]:!!offen;
   d.addEventListener('toggle',()=>{offenMerk[titel]=d.open});return d}
 function listen(){const lst=(id,arr)=>h('datalist',{id},arr.map(o=>h('option',{value:o})));
-  return h('div',{},lst('dl-fern',FERN),lst('dl-ktyp',KONTO_TYPEN))}
+  return h('div',{},lst('dl-fern',FERN),lst('dl-ktyp',KONTO_TYPEN),lst('dl-dt',ALT_DATENTRAEGER),lst('dl-lm',ALT_LOESCH),lst('dl-es',ALT_ENTSORGUNG),lst('dl-firmen',firmenListe().map(f=>f.name)))}
 
 /* ---------- Ansicht: Liste ---------- */
 async function zeigeListe(){
@@ -214,10 +227,11 @@ async function zeigeListe(){
       h('div',{class:'row',style:'margin-top:8px'},
         h('label',{class:'btn klein',style:'cursor:pointer'},'Datei importieren',
           h('input',{type:'file',accept:'.json,application/json',multiple:true,style:'display:none',onchange:dateienEinlesen})),
-        h('button',{class:'btn klein',onclick:vorlagenVerwalten},'Vorlagen'))),
+        h('button',{class:'btn klein',onclick:vorlagenVerwalten},'Vorlagen'),
+        h('button',{class:'btn klein',onclick:zeigeFirmen},'Firmen'))),
     h('div',{class:'fuss'},h('button',{class:'btn primary',onclick:neu},'＋ Neue Einrichtung')),listen())}
 
-async function neu(){cur=neueEinrichtung();curG=0;await sofortSpeichern();zeigeEdit(true)}
+async function neu(firma){cur=neueEinrichtung(typeof firma==='string'?firma:'');curG=0;await sofortSpeichern();zeigeEdit(true)}
 async function oeffne(uid){const l=await alle();cur=l.find(e=>e.uid===uid);if(!cur)return;curG=0;zeigeEdit(true)}
 function zurueck(){sofortSpeichern().then(()=>{if(history.state&&history.state.v==='edit')history.back();else zeigeListe()})}
 window.addEventListener('popstate',()=>{sofortSpeichern().then(zeigeListe)});
@@ -247,10 +261,11 @@ function zeigeEdit(neuAnzeigen){
     h('div',{class:'wrap'},
       h('div',{class:'card'},
         feld('Kunde *',cur,'kunde'),
-        feld('Firma *',cur,'firma',{on:i=>{$('#titel').textContent=i.value||'Neue Einrichtung'}}),
+        feld('Firma *',cur,'firma',{list:'dl-firmen',on:i=>{$('#titel').textContent=i.value||'Neue Einrichtung'}}),
         feld('Datum',cur,'datum',{type:'date'}),
         gastBlock()),
-      h('div',{id:'chips'}),h('div',{id:'dev'})),
+      h('div',{id:'chips'}),h('div',{id:'dev'}),
+      bereich('Übergabe: Unterschrift des Kunden',[unterschriftBlock()],!!cur.unterschrift)),
     h('div',{class:'fuss'},h('button',{class:'btn',onclick:zurueck},'Fertig'),
       h('button',{class:'btn primary',onclick:exportieren},'Exportieren')),listen());
   chipsZeichnen();geraetZeichnen()}
@@ -348,12 +363,31 @@ function geraetZeichnen(){
         h('input',{type:'file',accept:'image/*',multiple:true,style:'display:none',onchange:e=>fotosHinzu(e,g,fotosZeichnen)}))))};
   fotosZeichnen();
 
+  /* Checkliste */
+  const cl=h('div',{id:'cl'});
+  const clZeichnen=()=>{g.checkliste=g.checkliste||[];const fertig=g.checkliste.filter(p=>p.ok).length;
+    const sel=h('select',{},h('option',{value:''},'– Vorlage wählen –'),Object.keys(CHECKLISTEN).map(n=>h('option',{value:n},n)));
+    sel.value=CHECKLISTEN[g.checkliste_name]?g.checkliste_name:'';
+    ersetze(cl,
+      h('div',{class:'field'},h('label',{},'Einsatzart'),sel),
+      h('button',{class:'btn klein',onclick:()=>{const n=sel.value;if(!n){toast('Bitte erst eine Vorlage wählen');return}
+        g.checkliste_name=n;const da=new Set(g.checkliste.map(p=>p.text));
+        for(const t of CHECKLISTEN[n])if(!da.has(t))g.checkliste.push({text:t,ok:false});speichern();clZeichnen()}},'Punkte laden'),
+      h('div',{class:'hinweis',style:'font-weight:700;margin:10px 0 4px',id:'clstand'},g.checkliste.length?fertig+' von '+g.checkliste.length+' erledigt':'Noch keine Punkte.'),
+      g.checkliste.map((p,i)=>h('div',{class:'row',style:'align-items:center;flex-wrap:nowrap'},
+        h('label',{class:'check',style:'flex:1'},(()=>{const c=h('input',{type:'checkbox'});c.checked=!!p.ok;
+          c.addEventListener('change',()=>{p.ok=c.checked;speichern();const f=g.checkliste.filter(x=>x.ok).length;$('#clstand').textContent=f+' von '+g.checkliste.length+' erledigt'});return c})(),p.text),
+        h('button',{class:'btn klein danger','aria-label':'Punkt entfernen',onclick:()=>{g.checkliste.splice(i,1);speichern();clZeichnen()}},'✕'))),
+      (()=>{const t={text:''};const f=feld('Eigener Punkt',t,'text');
+        return h('div',{},f,h('button',{class:'btn klein',onclick:()=>{if(!t.text.trim())return;g.checkliste.push({text:t.text.trim(),ok:false});speichern();clZeichnen()}},'＋ Punkt'))})())};
+  clZeichnen();
+
   box.replaceChildren(
     bereich('Gerät',[typ,
       feld('Bezeichnung',g,'bezeichnung',{on:titelAkt}),ohneClient?null:feld('Client-Name',g,'client_name'),feld('Für wen',g,'fuer_wen'),
       auswahl('Art',g,'art',ARTEN),
       feld('Eingerichtet von',g,'eingerichtet_von',{on:i=>ls('eingerichtet_von',i.value)}),
-      feld('Modell / Seriennummer',g,'modell'),ohneClient?null:feld('Entsperrcode',g,'entsperrcode',{secret:true})],true),
+      feld('Modell / Seriennummer',g,'modell',{scan:true}),ohneClient?null:feld('Entsperrcode',g,'entsperrcode',{secret:true})],true),
     bereich('Zeit',[
       feld('Datum',g,'datum',{type:'date'}),
       h('div',{class:'grid2'},feld('Von',g,'von',{type:'time',on:dauerAkt}),feld('Bis',g,'bis',{type:'time',on:dauerAkt})),
@@ -367,11 +401,26 @@ function geraetZeichnen(){
     bereich('Konfiguration',[
       auswahl('Stand',g,'grundkonfig',KONFIG),haken('NinjaOne installiert',g,'ninjaone'),haken('ESET installiert',g,'eset'),
       feld('Was wurde konfiguriert?',g,'grundkonfig_notiz',{area:true})],false),
+    bereich('Checkliste',[cl],(g.checkliste||[]).length>0),
     bereich('Programme',[software],false),
     bereich('Konten',[konten],false),
     bereich('Netzwerk und Fernwartung',[
       feld('Hostname',g,'hostname'),feld('IP-Adresse',g,'ip'),istNetz?null:feld('WLAN',g,'wlan'),
+      feld('DNS-Server',g,'dns'),feld('VLAN',g,'vlan'),istNetz?feld('Firmware-Version',g,'firmware'):null,
+      istNetz?haken('Konfiguration gesichert',g,'config_gesichert'):null,
       feld('Fernwartung',g,'fern_tool',{list:'dl-fern'}),feld('Fernwartungs-ID',g,'fern_id')],false),
+    bereich('Domäne und Netzlaufwerke',[
+      haken('Domäne beigetreten',g,'dom_beigetreten'),feld('Domäne / Arbeitsgruppe',g,'domaene'),
+      feld('Organisationseinheit (OU)',g,'dom_ou'),feld('Domänenbenutzer',g,'dom_benutzer'),
+      feld('Netzlaufwerke (eine Zeile pro Laufwerk)',g,'netzlaufwerke',{area:true,rows:3})],
+      !!(g.dom_beigetreten||g.domaene||g.dom_ou||g.dom_benutzer||g.netzlaufwerke)),
+    bereich('Altgerät und Entsorgung',[
+      feld('Altgerät',g,'alt_bezeichnung'),
+      feld('Seriennummer Altgerät',g,'alt_sn',{scan:true}),
+      feld('Datenträger',g,'alt_datentraeger',{list:'dl-dt'}),feld('Löschmethode',g,'alt_loeschmethode',{list:'dl-lm'}),
+      feld('Gelöscht am',g,'alt_loeschdatum',{type:'date'}),feld('Entsorgung',g,'alt_entsorgung',{list:'dl-es'}),
+      feld('Übergeben an',g,'alt_uebergeben_an'),feld('Bemerkung',g,'alt_notiz',{area:true})],
+      !!(g.alt_bezeichnung||g.alt_sn||g.alt_loeschmethode)),
     bereich('Router / Netzwerkgerät',[
       feld('Admin-Benutzer',g,'router_admin'),feld('Admin-Passwort',g,'router_admin_pw',{secret:true}),
       feld('WLAN-Name (Hauptnetz)',g,'wlan_name'),feld('WLAN-Passwort (Hauptnetz)',g,'wlan_pw',{secret:true}),
@@ -401,10 +450,10 @@ async function fotosHinzu(ev,g,neuZeichnen){
 
 /* ---------- Export und Import ---------- */
 function exportObjekt(e){return {format:'dats-mobil',version:1,exportiert:new Date().toISOString(),
-  einrichtung:{uid:e.uid,kunde:e.kunde,firma:e.firma,datum:e.datum,gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',geraete:e.geraete.map(g=>{
+  einrichtung:{uid:e.uid,kunde:e.kunde,firma:e.firma,datum:e.datum,gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',unterschrift:e.unterschrift||'',unterschrift_name:e.unterschrift_name||'',unterschrift_datum:e.unterschrift_datum||'',geraete:e.geraete.map(g=>{
     const o={uid:g.uid};for(const k of FELDER)o[k]=g[k]==null?'':g[k];
     const m=parseDauer(g.dauer);o.dauer=m!=null?String(m):'';
-    o.ninjaone=!!g.ninjaone;o.eset=!!g.eset;
+    for(const k of HAKEN)o[k]=!!g[k];o.checkliste=(g.checkliste||[]).filter(p=>(p.text||'').trim()).map(p=>({text:p.text,ok:!!p.ok}));
     o.software=g.software.filter(s=>(s.programm||'').trim());o.konten=g.konten;
     o.fotos=g.fotos.map(f=>({id:f.id,text:f.text||'',daten:f.daten}));return o})}}}
 function dateiName(e){const s=t=>String(t||'').normalize('NFKD').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_').slice(0,40)||'x';
@@ -422,14 +471,113 @@ async function exportieren(){
 async function dateienEinlesen(ev){
   const dateien=[...ev.target.files];ev.target.value='';let n=0;
   for(const d of dateien){try{const o=JSON.parse(await d.text());
+      if(o.format==='dats-firmen'&&Array.isArray(o.firmen)){firmenSpeichern(o.firmen);toast(o.firmen.length+' Firmenkarten geladen');continue}
       if(o.format!=='dats-mobil'||!o.einrichtung)throw new Error('falsches Format');
       const e=o.einrichtung;const vorh=((await alle())||[]).find(x=>x.uid===e.uid);
       if(vorh&&!confirm('„'+(e.firma||'ohne Firma')+'“ ist schon auf diesem Handy. Überschreiben?'))continue;
-      await sichern({uid:e.uid,kunde:e.kunde||'',firma:e.firma||'',datum:e.datum||heute(),gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',geaendert:Date.now(),exportiert:Date.now(),
+      await sichern({uid:e.uid,kunde:e.kunde||'',firma:e.firma||'',datum:e.datum||heute(),gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',unterschrift:e.unterschrift||'',unterschrift_name:e.unterschrift_name||'',unterschrift_datum:e.unterschrift_datum||'',geaendert:Date.now(),exportiert:Date.now(),
         geraete:(e.geraete||[]).map(g=>Object.assign(neuesGeraet(e.datum||heute()),g,{uhr:{summe:0,start:null},
-          software:g.software||[],konten:g.konten||[],fotos:g.fotos||[]}))});n++}
+          software:g.software||[],konten:g.konten||[],fotos:g.fotos||[],checkliste:g.checkliste||[]}))});n++}
     catch(err){toast('„'+d.name+'“ nicht lesbar')}}
-  if(n)toast(n+' Einrichtung(en) geladen');zeigeListe()}
+  if(n>0)toast(n+' Einrichtung(en) geladen');zeigeListe()}
+
+/* ---------- Seriennummer per Kamera scannen ---------- */
+async function scanStarten(inp){
+  if(!('BarcodeDetector' in window)){toast('Scannen wird von diesem Browser nicht unterstützt – bitte abtippen');return}
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){toast('Kamera nicht verfügbar');return}
+  let strom;
+  try{strom=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false})}
+  catch(e){toast('Kamera-Zugriff nicht erlaubt');return}
+  let formate;try{formate=await BarcodeDetector.getSupportedFormats()}catch(e){formate=null}
+  const wunsch=['code_128','code_39','code_93','ean_13','ean_8','itf','codabar','qr_code','data_matrix','upc_a','upc_e'];
+  const det=new BarcodeDetector(formate?{formats:wunsch.filter(f=>formate.includes(f))}:undefined);
+  const video=h('video',{playsinline:true,muted:true,autoplay:true,style:'width:100%;max-height:70vh;background:#000;border-radius:12px'});
+  video.srcObject=strom;
+  let aktiv=true;
+  const ende=()=>{aktiv=false;strom.getTracks().forEach(t=>t.stop());ueber.remove()};
+  const ueber=h('div',{id:'scan',style:'position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.85);display:flex;flex-direction:column;justify-content:center;gap:12px;padding:16px'},
+    h('div',{style:'color:#fff;text-align:center;font-weight:600'},'Barcode oder QR-Code ins Bild halten'),video,
+    h('button',{class:'btn',onclick:ende},'Abbrechen'));
+  document.body.append(ueber);
+  try{const pr=video.play();if(pr&&pr.catch)pr.catch(()=>{})}catch(e){}
+  const schleife=async()=>{
+    if(!aktiv)return;
+    try{const r=await det.detect(video);
+      if(r.length&&r[0].rawValue){inp.value=r[0].rawValue;inp.dispatchEvent(new Event('input'));
+        if(navigator.vibrate)navigator.vibrate(60);ende();toast('Gelesen: '+r[0].rawValue);return}}catch(e){}
+    setTimeout(schleife,250)};
+  schleife()}
+
+/* ---------- Unterschrift des Kunden ---------- */
+function unterschriftBlock(){
+  const box=h('div',{});
+  const zeichnen=()=>{
+    if(cur.unterschrift){
+      ersetze(box,
+        h('div',{class:'hinweis'},'Unterschrieben von '+(cur.unterschrift_name||'–')+(cur.unterschrift_datum?' am '+de(cur.unterschrift_datum):'')),
+        h('img',{src:cur.unterschrift,alt:'Unterschrift',style:'max-width:100%;background:#fff;border:1px solid var(--rand);border-radius:10px;margin:8px 0'}),
+        h('button',{class:'btn klein danger',onclick:()=>{if(confirm('Unterschrift löschen?')){cur.unterschrift='';cur.unterschrift_name='';cur.unterschrift_datum='';speichern();zeichnen()}}},'Unterschrift löschen'));
+      return}
+    const c=h('canvas',{width:700,height:260,id:'sigcanvas',style:'width:100%;height:auto;aspect-ratio:700/260;background:#fff;border:1px solid var(--feldrand);border-radius:10px;touch-action:none;display:block'});
+    const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
+    x.strokeStyle='#111';x.lineWidth=3.5;x.lineCap='round';x.lineJoin='round';
+    let malt=false,gemalt=false,l=null;
+    const pos=e=>{const r=c.getBoundingClientRect();return [(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]};
+    c.addEventListener('pointerdown',e=>{malt=true;l=pos(e);try{c.setPointerCapture(e.pointerId)}catch(_){ }
+      x.beginPath();x.arc(l[0],l[1],1.7,0,7);x.fillStyle='#111';x.fill();gemalt=true;e.preventDefault()});
+    c.addEventListener('pointermove',e=>{if(!malt)return;const p=pos(e);x.beginPath();x.moveTo(l[0],l[1]);x.lineTo(p[0],p[1]);x.stroke();l=p;e.preventDefault()});
+    const aus=()=>{malt=false};c.addEventListener('pointerup',aus);c.addEventListener('pointercancel',aus);
+    const name={n:cur.unterschrift_name||''};
+    ersetze(box,
+      h('div',{class:'hinweis',style:'margin-bottom:6px'},'Mit dem Finger unterschreiben:'),c,
+      h('div',{style:'margin-top:10px'},feld('Name in Druckbuchstaben (leer = Kundenname)',name,'n')),
+      h('div',{class:'row'},
+        h('button',{class:'btn klein',onclick:()=>{x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);gemalt=false}},'Löschen'),
+        h('button',{class:'btn klein primary',onclick:()=>{if(!gemalt){toast('Bitte erst unterschreiben');return}
+          cur.unterschrift=c.toDataURL('image/jpeg',0.85);cur.unterschrift_name=(name.n||'').trim()||(cur.kunde||'').trim();cur.unterschrift_datum=heute();
+          speichern();zeichnen();toast('Unterschrift gespeichert')}},'Unterschrift übernehmen')))};
+  zeichnen();return box}
+
+/* ---------- Firmenkarten (vom PC) ---------- */
+function firmenListe(){const f=ls('firmen');return Array.isArray(f)?f:[]}
+function firmenSpeichern(f){ls('firmen',f.filter(x=>x&&typeof x==='object'&&String(x.name||'').trim()).map(x=>({
+  name:String(x.name||''),ansprechpartner:String(x.ansprechpartner||''),telefon:String(x.telefon||''),fern_ids:String(x.fern_ids||''),notizen:String(x.notizen||'')})))}
+function mitTelLinks(text){
+  return String(text||'').split('\n').map(z=>{if(!z.trim())return null;const teile=[];let ende=0,m;const re=/\+?\(?\d[\d ()\/\-]{4,}\d/g;
+    while((m=re.exec(z))){teile.push(z.slice(ende,m.index));
+      const ziffern=m[0].replace(/[^\d+]/g,'').replace(/(?!^)\+/g,'');
+      teile.push(h('a',{href:'tel:'+ziffern,style:'color:var(--text);font-weight:700'},m[0]));ende=m.index+m[0].length}
+    teile.push(z.slice(ende));return h('div',{},teile)})}
+function zeigeFirmen(){
+  stoppeUhr();cur=null;
+  try{history.pushState({v:'firmen'},'','#firmen')}catch(e){}
+  const liste=document.createElement('div');
+  const suche=h('input',{type:'search',placeholder:'Firma, Person oder Nummer suchen …',autocomplete:'off',id:'firmensuche'});
+  const zeichnen=()=>{const q=suche.value.trim().toLowerCase();const alle=firmenListe();
+    const treffer=alle.filter(f=>!q||[f.name,f.ansprechpartner,f.telefon,f.fern_ids,f.notizen].join('\n').toLowerCase().replace(/[\s\-()\/]/g,'').includes(q.replace(/[\s\-()\/]/g,'')));
+    ersetze(liste,
+      !alle.length?h('div',{class:'leer'},'Noch keine Firmenkarten.',h('br'),'Im Büro-Programm unter „Firmen“ → „Firmenkarten ans Handy“ speichern und hier importieren.'):null,
+      alle.length&&!treffer.length?h('div',{class:'leer'},'Nichts gefunden.'):null,
+      treffer.map(f=>{const d=h('details',{},h('summary',{},f.name),h('div',{class:'inhalt'},
+        f.ansprechpartner?[h('div',{class:'hinweis'},'Ansprechpartner'),mitTelLinks(f.ansprechpartner)]:null,
+        f.telefon?[h('div',{class:'hinweis',style:'margin-top:8px'},'Telefon'),mitTelLinks(f.telefon)]:null,
+        f.fern_ids?[h('div',{class:'hinweis',style:'margin-top:8px'},'Fernwartungs-IDs'),h('div',{style:'white-space:pre-wrap'},f.fern_ids)]:null,
+        f.notizen?[h('div',{class:'hinweis',style:'margin-top:8px'},'Notizen'),h('div',{style:'white-space:pre-wrap'},f.notizen)]:null,
+        h('div',{class:'row',style:'margin-top:12px'},h('button',{class:'btn klein primary',onclick:()=>neu(f.name)},'Neue Einrichtung hier'))));
+        d.open=treffer.length===1;return d}))};
+  suche.addEventListener('input',zeichnen);
+  $('#app').replaceChildren(
+    h('div',{class:'bar'},h('button',{class:'icon',onclick:()=>history.back(),title:'Zurück'},'←'),h('h1',{},logo(),h('span',{class:'t'},'Firmen'))),
+    h('div',{class:'wrap'},h('div',{class:'field'},suche),liste,
+      h('div',{class:'row',style:'margin-top:8px'},
+        h('label',{class:'btn klein',style:'cursor:pointer'},'Firmenkarten importieren',
+          h('input',{type:'file',accept:'.json,application/json',style:'display:none',onchange:async ev=>{await dateienEinlesenFirmen(ev);zeichnen()}})))),
+    listen());
+  zeichnen()}
+async function dateienEinlesenFirmen(ev){
+  const d=ev.target.files[0];ev.target.value='';if(!d)return;
+  try{const o=JSON.parse(await d.text());if(o.format!=='dats-firmen'||!Array.isArray(o.firmen))throw new Error('Format');
+    firmenSpeichern(o.firmen);toast(o.firmen.length+' Firmenkarten geladen')}catch(e){toast('„'+d.name+'“ ist keine Firmenkarten-Datei')}}
 
 /* ---------- Vorlagen und Design ---------- */
 function vorlagenVerwalten(){
