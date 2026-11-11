@@ -1,5 +1,5 @@
 // DiTs Mobil – Offline-Speicher. Version ändert sich automatisch bei jedem Update.
-const CACHE = 'dits-06d607f8';
+const CACHE = 'dits-d74a65f4';
 const DATEIEN = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(DATEIEN))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(k => Promise.all(k.filter(n => n !== CACHE).map(n => caches.delete(n))))); self.clients.claim(); });
