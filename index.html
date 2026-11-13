@@ -67,7 +67,7 @@ details>.inhalt{padding:0 14px 6px}
 .badge.ok{background:var(--ok);color:#fff}
 .karte-liste{display:block;width:100%;text-align:left;border:1px solid var(--rand);border-left:6px solid var(--feldrand);
   background:var(--card);border-radius:14px;padding:14px;margin:0 0 10px;cursor:pointer}
-.karte-liste.fertig{border-left-color:var(--ok)} .karte-liste.offen{border-left-color:var(--warn)}
+.karte-liste.defekt{border-left-color:var(--marke)} .karte-liste.fertig{border-left-color:var(--ok)} .karte-liste.offen{border-left-color:var(--warn)}
 .karte-liste b{display:block;font-size:17px}
 .banner{background:var(--card);border:1px solid var(--marke);border-radius:14px;padding:12px 14px;margin:0 0 12px}
 .leer{text-align:center;color:var(--leicht);padding:40px 10px}
@@ -149,15 +149,20 @@ function dauerText(m){if(m==null)return '';if(m<60)return m+' Min';return Math.f
 /* ---------- Speicher (IndexedDB) ---------- */
 let dbp=null;
 function dbOeffnen(){return dbp||(dbp=new Promise((res,rej)=>{
-  const r=indexedDB.open('dats-mobil',1);
-  r.onupgradeneeded=()=>r.result.createObjectStore('einr',{keyPath:'uid'});
+  const r=indexedDB.open('dats-mobil',2);
+  r.onupgradeneeded=()=>{const d=r.result;
+    if(!d.objectStoreNames.contains('einr'))d.createObjectStore('einr',{keyPath:'uid'});
+    if(!d.objectStoreNames.contains('inventar'))d.createObjectStore('inventar',{keyPath:'uid'})};
   r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}))}
-async function tx(mode,fn){const d=await dbOeffnen();return new Promise((res,rej)=>{
-  const t=d.transaction('einr',mode);const r=fn(t.objectStore('einr'));
+async function tx(mode,fn,speicher='einr'){const d=await dbOeffnen();return new Promise((res,rej)=>{
+  const t=d.transaction(speicher,mode);const r=fn(t.objectStore(speicher));
   t.oncomplete=()=>res(r&&r.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})}
 const alle=()=>tx('readonly',s=>s.getAll());
 const sichern=o=>tx('readwrite',s=>s.put(o));
 const loeschen=uid=>tx('readwrite',s=>s.delete(uid));
+const invAlle=()=>tx('readonly',s=>s.getAll(),'inventar');
+const invSichern=o=>tx('readwrite',s=>s.put(o),'inventar');
+const invLoeschen=uid=>tx('readwrite',s=>s.delete(uid),'inventar');
 
 /* ---------- Modell ---------- */
 function neuesGeraet(datum){return {uid:neueId(),bezeichnung:'',client_name:'',fuer_wen:'',typ:TYPEN[0],art:ARTEN[0],
@@ -170,8 +175,8 @@ function neuesGeraet(datum){return {uid:neueId(),bezeichnung:'',client_name:'',f
 function neueEinrichtung(firma){const d=heute();return {uid:neueId(),kunde:'',firma:firma||'',datum:d,gast_wlan:false,gast_ssid:'',gast_pw:'',unterschrift:'',unterschrift_name:'',unterschrift_datum:'',geraete:[neuesGeraet(d)],geaendert:Date.now(),exportiert:0}}
 function vorlagen(){const v=ls('vorlagen');return v&&typeof v==='object'?v:JSON.parse(JSON.stringify(STANDARD_VORLAGEN))}
 
-let cur=null,curG=0,speicherTimer=null;
-function speichern(){if(!cur)return;cur.geaendert=Date.now();clearTimeout(speicherTimer);
+let cur=null,curG=0,speicherTimer=null,curT=null,ansicht='liste';
+function speichern(){if(curT&&ansicht==='invedit'){invSpeichernSpaeter();return}if(!cur)return;cur.geaendert=Date.now();clearTimeout(speicherTimer);
   speicherTimer=setTimeout(()=>sichern(cur).catch(()=>toast('Speichern nicht möglich')),300)}
 function sofortSpeichern(){if(!cur)return Promise.resolve();clearTimeout(speicherTimer);return sichern(cur)}
 
@@ -206,7 +211,7 @@ function listen(){const lst=(id,arr)=>h('datalist',{id},arr.map(o=>h('option',{v
 
 /* ---------- Ansicht: Liste ---------- */
 async function zeigeListe(){
-  cur=null;
+  cur=null;curT=null;ansicht='liste';
   const liste=(await alle().catch(()=>[]))||[];
   liste.sort((a,b)=>(b.datum||'').localeCompare(a.datum||'')||b.geaendert-a.geaendert);
   const offen=liste.filter(e=>e.geaendert>(e.exportiert||0));
@@ -227,13 +232,17 @@ async function zeigeListe(){
         h('label',{class:'btn klein',style:'cursor:pointer'},'Datei importieren',
           h('input',{type:'file',accept:'.json,application/json',multiple:true,style:'display:none',onchange:dateienEinlesen})),
         h('button',{class:'btn klein',onclick:vorlagenVerwalten},'Vorlagen'),
-        h('button',{class:'btn klein',onclick:zeigeFirmen},'Firmen'))),
+        h('button',{class:'btn klein',onclick:zeigeFirmen},'Firmen'),
+        h('button',{class:'btn klein',onclick:()=>zeigeInventar(true)},'Inventar'))),
     h('div',{class:'fuss'},h('button',{class:'btn primary',onclick:neu},'＋ Neue Einrichtung')),listen())}
 
 async function neu(firma){cur=neueEinrichtung(typeof firma==='string'?firma:'');curG=0;await sofortSpeichern();zeigeEdit(true)}
 async function oeffne(uid){const l=await alle();cur=l.find(e=>e.uid===uid);if(!cur)return;curG=0;zeigeEdit(true)}
 function zurueck(){sofortSpeichern().then(()=>{if(history.state&&history.state.v==='edit')history.back();else zeigeListe()})}
-window.addEventListener('popstate',()=>{sofortSpeichern().then(zeigeListe)});
+window.addEventListener('popstate',()=>{
+  if(ansicht==='invedit'){invSofort().then(()=>zeigeInventar(false))}
+  else if(ansicht==='inv'){zeigeListe()}
+  else sofortSpeichern().then(zeigeListe)});
 
 /* ---------- Gäste-WLAN: Felder erscheinen erst nach dem Haken ---------- */
 function gastBlock(){
@@ -251,6 +260,7 @@ function gastBlock(){
 
 /* ---------- Ansicht: Einrichtung ---------- */
 function zeigeEdit(neuAnzeigen){
+  ansicht='edit';
   if(neuAnzeigen){try{history.pushState({v:'edit'},'','#edit')}catch(e){}}
   const app=$('#app');
   app.replaceChildren(
@@ -420,13 +430,13 @@ function geraetZeichnen(){
 /* ---------- Fotos ---------- */
 function bildLaden(datei){return new Promise((res,rej)=>{const u=URL.createObjectURL(datei);const i=new Image();
   i.onload=()=>{URL.revokeObjectURL(u);res(i)};i.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('Bild nicht lesbar'))};i.src=u})}
-async function fotosHinzu(ev,g,neuZeichnen){
+async function fotosHinzu(ev,g,neuZeichnen,max=1280,qual=0.8){
   const dateien=[...ev.target.files];ev.target.value='';
   for(const d of dateien){
-    try{const img=await bildLaden(d);const max=1280,s=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+    try{const img=await bildLaden(d);const s=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
       const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*s);c.height=Math.round(img.naturalHeight*s);
       c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-      g.fotos.push({id:neueId(),text:'',daten:c.toDataURL('image/jpeg',0.8)})}
+      g.fotos.push({id:neueId(),text:'',daten:c.toDataURL('image/jpeg',qual)})}
     catch(e){toast('Foto konnte nicht gelesen werden')}}
   speichern();neuZeichnen()}
 
@@ -564,6 +574,118 @@ function vorlagenVerwalten(){
   const v=vorlagen(),namen=Object.keys(v);
   const a=prompt('Vorlagen:\n\n'+(namen.map(n=>'• '+n+' ('+v[n].length+' Programme)').join('\n')||'(keine)')+'\n\nName einer Vorlage eingeben, um sie zu löschen (leer = abbrechen):');
   if(a&&v[a]&&confirm('Vorlage „'+a+'“ löschen?')){delete v[a];ls('vorlagen',v);toast('Vorlage gelöscht')}}
+/* ---------- Inventar (ausgebaute Teile, z. B. Netzteile) ---------- */
+const INV_ARTEN=['Netzteil','Mainboard','Arbeitsspeicher (RAM)','Festplatte (HDD)','SSD','Grafikkarte','Prozessor','Lüfter / Kühler','Netzwerkkarte','Laufwerk','Kabel / Zubehör','Gehäuse','Sonstiges'];
+const INV_VERW=['Offen','Behalten','Verkaufen','Entsorgen'];
+const INV_STATUS=['Ungetestet','Funktioniert','Defekt'];
+const INV_FELDER=['art','hersteller','modell','eigenschaften','seriennr','herkunft','verwendung','status','notiz'];
+function neuesTeil(){const l=ls('inv_letzte')||{};
+  return {uid:neueId(),art:l.art||'',hersteller:'',modell:'',eigenschaften:'',seriennr:'',herkunft:l.herkunft||'',
+    verwendung:INV_VERW[0],status:INV_STATUS[0],notiz:'',datum:heute(),fotos:[],geaendert:Date.now(),exportiert:0}}
+let invTimer=null;
+function invSpeichernSpaeter(){if(!curT)return;curT.geaendert=Date.now();clearTimeout(invTimer);
+  ls('inv_letzte',{art:curT.art,herkunft:curT.herkunft});
+  invTimer=setTimeout(()=>invSichern(curT).catch(()=>toast('Speichern nicht möglich')),300)}
+function invSofort(){if(!curT)return Promise.resolve();clearTimeout(invTimer);return invSichern(curT)}
+const teilTitel=t=>[t.art,[t.hersteller,t.modell].filter(Boolean).join(' ')].filter(Boolean).join(' – ')||'Neues Teil';
+let invFilter='';
+async function zeigeInventar(neuAnzeigen){
+  curT=null;ansicht='inv';
+  if(neuAnzeigen){try{history.pushState({v:'inv'},'','#inv')}catch(e){}}
+  const liste=((await invAlle().catch(()=>[]))||[]).sort((a,b)=>b.geaendert-a.geaendert);
+  const offen=liste.filter(t=>t.geaendert>(t.exportiert||0));
+  const q=invFilter.trim().toLowerCase();
+  const sicht=q?liste.filter(t=>[t.art,t.hersteller,t.modell,t.eigenschaften,t.seriennr,t.herkunft,t.status,t.verwendung,t.notiz].join(' ').toLowerCase().includes(q)):liste;
+  const such=h('input',{type:'search',placeholder:'Suchen …',value:invFilter,style:'margin-bottom:10px'});
+  such.addEventListener('input',()=>{invFilter=such.value;clearTimeout(zeigeInventar.t);zeigeInventar.t=setTimeout(()=>zeigeInventar(false),250)});
+  $('#app').replaceChildren(
+    h('div',{class:'bar'},h('button',{class:'icon',onclick:invZurueck,title:'Zurück'},'←'),
+      h('h1',{},logo(),h('span',{class:'t'},'Inventar'))),
+    h('div',{class:'wrap'},
+      offen.length?h('div',{class:'banner'},h('b',{},offen.length+' Teil(e) noch nicht exportiert. '),'Exportiere sie, bevor du sie im Büro einliest – so ist auch alles gesichert.'):null,
+      liste.length?such:null,
+      sicht.length?sicht.map(t=>{const klasse=t.status==='Funktioniert'?'fertig':t.status==='Defekt'?'defekt':'';
+        return h('button',{class:'karte-liste '+klasse,onclick:()=>oeffneTeil(t.uid)},
+          h('div',{class:'row',style:'flex-wrap:nowrap'},
+            t.fotos&&t.fotos[0]?h('img',{src:t.fotos[0].daten,alt:'',style:'width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none'}):null,
+            h('div',{style:'min-width:0'},h('b',{},teilTitel(t)),
+              h('span',{class:'hinweis'},[t.eigenschaften,t.herkunft,(t.fotos||[]).length+' Foto(s)'].filter(Boolean).join(' · ')),' ',
+              h('span',{class:'badge'+(t.status==='Funktioniert'?' ok':t.status==='Defekt'?' warn':'')},t.status),' ',
+              t.verwendung&&t.verwendung!=='Offen'?h('span',{class:'badge'},t.verwendung):null,' ',
+              t.geaendert>(t.exportiert||0)?h('span',{class:'badge warn'},'nicht exportiert'):null)))})
+      :h('div',{class:'leer'},liste.length?'Nichts gefunden.':'Noch keine Teile.',h('br'),liste.length?'':'Tippe unten auf „Neues Teil“.'),
+      liste.length?h('div',{class:'row',style:'margin-top:8px'},
+        h('button',{class:'btn klein',onclick:()=>invExport(false)},'Neue/geänderte exportieren'),
+        h('button',{class:'btn klein',onclick:()=>invExport(true)},'Alle exportieren')):null),
+    h('div',{class:'fuss'},h('button',{class:'btn primary',onclick:neuesTeilAnlegen},'＋ Neues Teil')),listen());
+  if(q)such.focus()}
+function invZurueck(){if(history.state&&history.state.v==='inv')history.back();else zeigeListe()}
+async function neuesTeilAnlegen(){curT=neuesTeil();await invSichern(curT);zeigeTeil(true)}
+async function oeffneTeil(uid){curT=((await invAlle())||[]).find(t=>t.uid===uid);if(!curT)return;zeigeTeil(true)}
+const teilLeer=t=>!(t.fotos&&t.fotos.length)&&!t.hersteller&&!t.modell&&!t.eigenschaften&&!t.seriennr&&!t.notiz;
+async function leeresTeilWeg(){if(curT&&teilLeer(curT)){clearTimeout(invTimer);const u=curT.uid;curT=null;await invLoeschen(u);return true}return false}
+function teilZurueck(){leeresTeilWeg().then(w=>w?null:invSofort()).then(()=>{if(history.state&&history.state.v==='invedit')history.back();else zeigeInventar(false)})}
+async function teilLoeschen(){if(!curT||!confirm('Dieses Teil mit allen Fotos löschen?'))return;
+  clearTimeout(invTimer);const u=curT.uid;curT=null;await invLoeschen(u);
+  if(history.state&&history.state.v==='invedit')history.back();else zeigeInventar(false)}
+function zeigeTeil(neuAnzeigen){
+  ansicht='invedit';
+  if(neuAnzeigen){try{history.pushState({v:'invedit'},'','#invedit')}catch(e){}}
+  const t=curT;
+  const fotos=h('div',{id:'fotos'});
+  const fotosZeichnen=()=>{ersetze(fotos,
+    t.fotos.map((f,i)=>h('div',{class:'foto'},h('img',{src:f.daten,alt:''}),
+      h('div',{class:'grow',style:'flex:1'},feld('Beschriftung (z. B. Typenschild)',f,'text'),
+        h('button',{class:'btn klein danger',onclick:()=>{if(confirm('Foto entfernen?')){t.fotos.splice(i,1);speichern();fotosZeichnen()}}},'Entfernen')))),
+    h('div',{class:'row'},
+      h('label',{class:'btn klein',style:'cursor:pointer'},'Foto aufnehmen',
+        h('input',{type:'file',accept:'image/*',capture:'environment',style:'display:none',onchange:e=>fotosHinzu(e,t,fotosZeichnen,1800,0.85)})),
+      h('label',{class:'btn klein',style:'cursor:pointer'},'Aus Galerie',
+        h('input',{type:'file',accept:'image/*',multiple:true,style:'display:none',onchange:e=>fotosHinzu(e,t,fotosZeichnen,1800,0.85)}))),
+    h('div',{class:'hinweis',style:'margin-top:6px'},'Tipp: das Typenschild/den Aufkleber scharf und aus der Nähe fotografieren, dazu ein Foto vom ganzen Teil.'))};
+  $('#app').replaceChildren(
+    h('div',{class:'bar'},h('button',{class:'icon',onclick:teilZurueck,title:'Zurück'},'←'),
+      h('h1',{},logo(),h('span',{class:'t',id:'titel'},teilTitel(t))),
+      h('button',{class:'icon',title:'Löschen',onclick:teilLoeschen,'aria-label':'Teil löschen'},ikon('papierkorb'))),
+    h('div',{class:'wrap'},
+      h('div',{class:'card'},fotos),
+      h('div',{class:'card'},
+        feld('Um was handelt es sich?',t,'art',{list:'dl-invart',on:()=>{$('#titel').textContent=teilTitel(t)}}),
+        feld('Hersteller',t,'hersteller',{on:()=>{$('#titel').textContent=teilTitel(t)}}),
+        feld('Modell',t,'modell',{on:()=>{$('#titel').textContent=teilTitel(t)}}),
+        feld('Eigenschaften (z. B. 450 W, 24-polig)',t,'eigenschaften',{area:true,rows:2}),
+        feld('Seriennummer',t,'seriennr',{scan:true}),
+        feld('Herkunft (Rechner / Kunde)',t,'herkunft'),
+        h('div',{class:'grid2'},auswahl('Verwendung',t,'verwendung',INV_VERW),auswahl('Status',t,'status',INV_STATUS)),
+        feld('Notiz',t,'notiz',{area:true,rows:2}))),
+    h('div',{class:'fuss'},h('button',{class:'btn',onclick:teilZurueck},'Fertig'),
+      h('button',{class:'btn primary',onclick:async()=>{if(teilLeer(curT)){toast('Erst Foto oder Angaben eintragen');return}await invSofort();const alt=curT;curT=neuesTeil();curT.herkunft=alt.herkunft;curT.art=alt.art;await invSichern(curT);zeigeTeil(false);toast('Nächstes Teil')}},'＋ Nächstes Teil')),
+    h('div',{},h('datalist',{id:'dl-invart'},INV_ARTEN.map(o=>h('option',{value:o})))));
+  fotosZeichnen()}
+const INV_GRENZE=14*1024*1024;
+async function invExport(alleTeile){
+  const liste=((await invAlle())||[]).sort((a,b)=>a.datum.localeCompare(b.datum)||a.geaendert-b.geaendert);
+  const wahl=alleTeile?liste:liste.filter(t=>t.geaendert>(t.exportiert||0));
+  if(!wahl.length){toast('Nichts zu exportieren');return}
+  const pakete=[];let akt=[],groesse=0;
+  for(const t of wahl){const gr=JSON.stringify(t).length;
+    if(akt.length&&groesse+gr>INV_GRENZE){pakete.push(akt);akt=[];groesse=0}
+    akt.push(t);groesse+=gr}
+  if(akt.length)pakete.push(akt);
+  const d=new Date(),stempel=heute()+'_'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0');
+  for(let i=0;i<pakete.length;i++){
+    const name='Inventar_'+stempel+(pakete.length>1?'_Teil'+(i+1):'')+'.json';
+    const o={format:'dats-inventar',version:1,exportiert:d.toISOString(),teile:pakete[i].map(t=>({uid:t.uid,datum:t.datum,geaendert:t.geaendert,
+      art:t.art,hersteller:t.hersteller,modell:t.modell,eigenschaften:t.eigenschaften,seriennr:t.seriennr,herkunft:t.herkunft,
+      verwendung:t.verwendung,status:t.status,notiz:t.notiz,fotos:(t.fotos||[]).map(f=>({id:f.id,text:f.text||'',daten:f.daten}))}))};
+    const a=h('a',{href:URL.createObjectURL(new Blob([JSON.stringify(o)],{type:'application/json'})),download:name});
+    document.body.append(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
+    await new Promise(r=>setTimeout(r,900))}
+  const jetzt=Date.now();
+  for(const t of wahl){t.exportiert=jetzt;t.geaendert=Math.min(t.geaendert,jetzt);await invSichern(t)}
+  toast(wahl.length+' Teil(e) exportiert'+(pakete.length>1?' ('+pakete.length+' Dateien)':''));zeigeInventar(false)}
+
 function themaSetzen(t){document.documentElement.setAttribute('data-theme',t)}
 function themaWechseln(){const t=document.documentElement.getAttribute('data-theme')==='dark'?'hell':'dark';themaSetzen(t);ls('thema',t)}
 themaSetzen(ls('thema')||(matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'hell'));
