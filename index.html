@@ -69,6 +69,9 @@ details>.inhalt{padding:0 14px 6px}
   background:var(--card);border-radius:14px;padding:14px;margin:0 0 10px;cursor:pointer}
 .karte-liste.defekt{border-left-color:var(--marke)} .karte-liste.fertig{border-left-color:var(--ok)} .karte-liste.offen{border-left-color:var(--warn)}
 .karte-liste b{display:block;font-size:17px}
+.w11{border:1px solid var(--rand);border-left:6px solid var(--feldrand);border-radius:10px;padding:10px 12px;margin:4px 0 12px;background:var(--card)}
+.w11 b{display:block;font-size:16px}
+.w11.ja,.w11.cpu{border-left-color:var(--ok)} .w11.nein{border-left-color:var(--marke)} .w11.bedingt,.w11.q{border-left-color:var(--warn)}
 .banner{background:var(--card);border:1px solid var(--marke);border-radius:14px;padding:12px 14px;margin:0 0 12px}
 .leer{text-align:center;color:var(--leicht);padding:40px 10px}
 .fuss{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--bg);border-top:1px solid var(--rand);
@@ -87,6 +90,161 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 <div id="app"></div>
 <div id="toast"></div>
 <script>
+/* ---------- Windows-11-Prüfung (Stand: offizielle Microsoft-Listen, Windows 11 25H2) ---------- */
+const W11_STAND='Stand: Microsoft-Liste 25H2';
+function w11Norm(s){return ' '+String(s||'').toLowerCase().replace(/\(r\)|\(tm\)|\(c\)|®|™/g,' ')
+  .replace(/@?\s*[\d.,]+\s*ghz/g,' ').replace(/[,;:_/]+/g,' ').replace(/\s+/g,' ')+' '}
+function w11Cpu(roh){
+  const x=w11Norm(roh);let m;
+  const R=(s,t)=>({s,t});
+  if(x.trim().length<2)return null;
+  /* ----- AMD ----- */
+  if(/threadripper/.test(x)){m=x.match(/threadripper\s*(?:pro\s*)?(\d{4})/);
+    if(m)return m[1][0]==='1'?R('nein','Threadripper 1000 (1. Generation) wird nicht unterstützt'):R('ja','Threadripper '+m[1]+' ist gelistet');
+    return R('?','Threadripper-Modell nicht erkannt')}
+  if(/epyc/.test(x)){m=x.match(/epyc\s*(\d{4})/);
+    if(m){const z=m[1],l=z[3];
+      if(z[0]==='7')return l==='1'?R('nein','EPYC 7001 (1. Generation) wird nicht unterstützt'):R('ja','EPYC '+z+' ist gelistet');
+      if('489'.includes(z[0]))return R('ja','EPYC '+z+' ist gelistet');
+      return R('?','EPYC '+z+': nur teilweise gelistet')}
+    return R('?','EPYC-Modell nicht erkannt')}
+  if(/ryzen\s*embedded|\b[vr]1\d{3}[a-z]?\b/.test(x))return R('?','Ryzen Embedded ist nur teilweise gelistet');
+  if(/ryzen\s*ai|ryzen\s*z\d/.test(x))return R('ja','Ryzen AI / Z-Serie ist gelistet');
+  if(/ryzen|\br[3579]\s*(?:pro\s*)?\d{4}/.test(x)){
+    const y=x.replace(/\bpro\b|\bmobile\b|with radeon graphics|\bamd\b|ryzen/g,' ');
+    m=y.match(/\b(\d{4})\s*([a-z]{0,3}\d?[a-z]{0,2})\b/);
+    if(!m)return R('?','Ryzen-Modell nicht erkannt (z. B. Ryzen 5 3600)');
+    const z=m[1],s=m[2],d=z[0];
+    if(/^(1200|1600)\s*af$/.test(z+' '+s)||/^(1200|1600)af$/.test(z+s))return R('?','Ryzen '+z+' AF (12 nm) – nicht eindeutig gelistet, bitte prüfen');
+    if(d==='1')return R('nein','Ryzen 1000 (1. Generation, Zen) wird nicht unterstützt');
+    if(d==='2'){if(/^(g|ge)$/.test(s)||/[uh]/.test(s))return R('nein','Ryzen 2000 Mobil/APU (Zen) wird nicht unterstützt');
+      return R('ja','Ryzen 2000 (Zen+) Desktop ist gelistet')}
+    return R('ja','Ryzen '+z+' ist gelistet')}
+  if(/athlon/.test(x)){
+    if(/athlon\s*(ii|x[234]|64|xp|mp|neo|\d\s*x2|x2)/.test(x))return R('nein','Alter Athlon wird nicht unterstützt');
+    m=x.match(/athlon\s*(?:gold|silver|pro)?\s*(\d{3,4})/);
+    if(m)return m[1][0]==='3'?R('ja','Athlon '+m[1]+' ist gelistet'):R('nein','Athlon '+m[1]+' (Zen/Raven Ridge oder älter) wird nicht unterstützt');
+    return R('?','Athlon-Modell nicht erkannt')}
+  if(/phenom|sempron|opteron|\bfx[-\s]?\d{4}|\ba(?:4|6|8|10|12)[-\s]\d{4}|\be[12][-\s]\d{4}|turion|geode|\bak?[-\s]?\d{4}\b/.test(x)&&!/intel/.test(x))
+    return R('nein','Ältere AMD-Serie wird nicht unterstützt');
+  /* ----- Qualcomm ----- */
+  if(/snapdragon|qualcomm/.test(x)){
+    if(/835/.test(x))return R('nein','Snapdragon 835 steht nicht auf der Liste');
+    if(/7c|8c|8cx|x\s*elite|x\s*plus|\bx1[a-z]?|850/.test(x))return R('ja','Dieser Snapdragon ist gelistet');
+    return R('?','Snapdragon nicht eindeutig – bitte prüfen')}
+  /* ----- Intel ----- */
+  if(/core\s*ultra/.test(x))return R('ja','Core Ultra ist gelistet');
+  if(!/\bi[3579]\b|\bi[3579][\s-]/.test(x)){m=x.match(/\bcore\s*([357])\s*(\d{3})\s*[a-z]{0,3}\b/);
+    if(m)return R('ja','Intel Core Serie 1/2 ist gelistet')}
+  if(/pentium/.test(x)){
+    if(/pentium\s*(4|d|iii|ii|pro|mmx|m|dual)\b|pentium\s*dual/.test(x))return R('nein','Alter Pentium wird nicht unterstützt');
+    m=x.match(/\b([gunjtepb]?)(\d{3,4})([a-z]{0,2})\b/);
+    if(m){const L=m[1],N=m[2],S=m[3];
+      if('tepb'.includes(L)&&L)return R('nein','Alter Pentium wird nicht unterstützt');
+      if(L==='j'||L==='n'){
+        if(N[0]==='3'||N[0]==='4')return R('nein','Pentium '+L.toUpperCase()+N+' (Apollo Lake/Braswell) wird nicht unterstützt');
+        if(N[0]==='5'||(N[0]==='6'&&L==='n'))return R('ja','Pentium Silver '+L.toUpperCase()+N+' ist gelistet');
+        return R('?','Pentium-Modell nicht eindeutig gelistet')}
+      if(N.length===3)return R('nein','Alter Pentium wird nicht unterstützt');
+      if(L==='g'){
+        if('5678'.includes(N[0]))return R('ja','Pentium Gold G'+N+' ist gelistet');
+        return R('nein','Pentium G'+N+' (6./7. Generation oder älter) wird nicht unterstützt')}
+      if('4567'.includes(N[0])){
+        if(N[0]==='4'&&!/gold/.test(x)&&!/^[uy]/.test(S))return R('nein','Pentium '+N+' wird nicht unterstützt');
+        return R('ja','Pentium Gold '+N+S.toUpperCase()+' ist gelistet')}
+      if(N[0]==='8'||N[0]==='6')return R('ja','Pentium '+N+' ist gelistet')}
+    return R('?','Pentium-Modell nicht eindeutig – bitte prüfen')}
+  if(/celeron/.test(x)){
+    m=x.match(/\b([gjnb]?)(\d{3,4})([a-z]{0,2})\b/);
+    if(!m||/celeron\s*(d|m)\b/.test(x))return /celeron\s*(d|m)\b/.test(x)?R('nein','Alter Celeron wird nicht unterstützt'):R('?','Celeron-Modell nicht erkannt');
+    const L=m[1],N=m[2],S=m[3];
+    if(L==='b'||N.length===3)return R('nein','Alter Celeron wird nicht unterstützt');
+    if(L==='g'){return '456'.includes(N[0])?R('ja','Celeron G'+N+' ist gelistet'):R('nein','Celeron G'+N+' (6./7. Generation oder älter) wird nicht unterstützt')}
+    if(L==='j'){if(N[0]==='4')return R('ja','Celeron J'+N+' ist gelistet');
+      return N[0]==='6'?R('?','Celeron J'+N+' nicht eindeutig gelistet'):R('nein','Celeron J'+N+' wird nicht unterstützt')}
+    if(L==='n'){if(N[0]==='4'&&/^[01]/.test(N.slice(1,2))&&!/^45/.test(N))return R('ja','Celeron N'+N+' ist gelistet');
+      if(N[0]==='5')return R('ja','Celeron N'+N+' ist gelistet');
+      return /^[46]/.test(N[0])?R('?','Celeron N'+N+' nicht eindeutig gelistet'):R('nein','Celeron N'+N+' wird nicht unterstützt')}
+    if(N[0]==='1'||N[0]==='2')return R('nein','Celeron '+N+S.toUpperCase()+' wird nicht unterstützt');
+    if(N[0]==='3'){if(['3867','3965'].includes(N))return R('ja','Celeron '+N+S.toUpperCase()+' ist gelistet');
+      if(['3205','3215','3755','3765'].includes(N))return R('nein','Celeron '+N+S.toUpperCase()+' (Broadwell) wird nicht unterstützt');
+      return R('?','Celeron '+N+S.toUpperCase()+' nicht eindeutig gelistet – bitte prüfen')}
+    if('4567'.includes(N[0]))return R('ja','Celeron '+N+S.toUpperCase()+' ist gelistet');
+    return R('?','Celeron-Modell nicht eindeutig')}
+  if(/\batom\b|\bx[567]-?[ze]?\d{4}/.test(x)&&!/xeon/.test(x)){
+    if(/\bx7\d{3}/.test(x))return R('ja','Atom x7000 ist gelistet');
+    if(/\bx6\d{3}/.test(x))return R('?','Atom x6000 nicht eindeutig gelistet');
+    return R('nein','Atom wird nicht unterstützt (nur Atom x7000)')}
+  if(/core\s*2|core2|core\s*duo|core\s*solo|\bduo\b|\bquad\b/.test(x)&&!/\bi[3579]/.test(x))return R('nein','Core 2 / Core Duo wird nicht unterstützt');
+  m=x.match(/\bi([3579])[\s-]*(?:m\s*)?(n)?(\d{3,5})([a-z]{0,3}\d{0,2})\b/);
+  if(m){const kl=m[1],nn=m[2],dg=m[3],suf=m[4];
+    if(nn)return R('ja','Core i'+kl+'-N'+dg+' ist gelistet');
+    let gen=dg.length===3?1:dg.length===4?(dg[0]==='1'?+dg.slice(0,2):+dg[0]):+dg.slice(0,2);
+    if((kl==='7'||kl==='9')&&/^xe?$/.test(suf)&&dg.length>=4&&(gen===7||gen===9||gen===10))
+      return R('nein','Core X (X-Serie) steht nicht auf der Microsoft-Liste');
+    if(kl==='7'&&dg==='7820'&&/^hq/.test(suf))return R('?','i7-7820HQ nur im Surface Studio 2 unterstützt');
+    if(gen>=8&&gen<=14)return R('ja','Core i'+kl+', '+gen+'. Generation ist gelistet');
+    if(gen>14)return R('?','Generation '+gen+' nicht erkannt');
+    return R('nein','Core i'+kl+', '+gen+'. Generation – erst ab der 8. Generation unterstützt')}
+  m=x.match(/\bm([357])[\s-]*(\d)(\d{3}|y\d{2})([a-z]?)/);
+  if(m&&/core/.test(x))return +m[2]>=8?R('ja','Core m, 8. Generation ist gelistet'):R('nein','Core m, '+m[2]+'. Generation wird nicht unterstützt');
+  if(/\bn(?:90|95|97|100|150|200|250|300|305|355)\b|\bu300\b|processor\s*300\b|intel\s*300\b/.test(x))return R('ja','Intel N-/U300-Serie ist gelistet');
+  /* ----- Xeon ----- */
+  const xeon=/xeon/.test(x);
+  m=x.match(/\be[357][\s-]*\d{4}/);if(m)return R('nein','Xeon E3/E5/E7 wird nicht unterstützt');
+  m=x.match(/\b[xewl][35]\d{3}\b/);if(m&&(xeon||/\b[xewl][35]\d{3}[a-z]?\b/.test(x)))return R('nein','Xeon dieser Generation wird nicht unterstützt');
+  m=x.match(/\be[\s-]*(2[1-4]\d{2})/);
+  if(m&&(xeon||/\be-2[1-4]\d{2}/.test(x)))return R('ja','Xeon E-'+m[1]+' ist gelistet');
+  m=x.match(/\bw[\s-]*(\d{4,5})(m?)/);
+  if(m&&(xeon||/\bw-\d{4}/.test(x))){const z=m[1],a2=z.slice(0,2);
+    if(z.length===5)return R('ja','Xeon W-'+z+'M ist gelistet');
+    if(['12','13','24','25','33','34','35'].includes(a2))return R('ja','Xeon W-'+z+' ist gelistet');
+    if(['21','22','31','32'].includes(a2))return R('?','Xeon W-'+z+' steht nicht (mehr) auf der aktuellen Liste');
+    return R('?','Xeon W nicht eindeutig')}
+  m=x.match(/\bd[\s-]*(\d{4})/);
+  if(m&&(xeon||/\bd-\d{4}/.test(x))){const a2=m[1].slice(0,2);
+    if(['17','18','27','28'].includes(a2))return R('ja','Xeon D-'+m[1]+' ist gelistet');
+    if(['15','16'].includes(a2))return R('nein','Xeon D-'+m[1]+' wird nicht unterstützt');
+    return R('?','Xeon D nicht eindeutig')}
+  if(xeon){
+    if(/phi/.test(x))return R('nein','Xeon Phi wird nicht unterstützt');
+    if(/(platinum|gold|silver|bronze)\s*\d{4}|scalable|xeon\s*(6|max)\b/.test(x))return R('ja','Xeon Scalable ist gelistet');
+    return R('?','Xeon-Modell nicht eindeutig – bitte prüfen')}
+  return R('?','Modell nicht erkannt – bitte genau eintragen, z. B. „i5-7500“ oder „Ryzen 5 3600“')}
+
+/* Mainboard-Hinweis über Sockel und Chipsatz */
+function w11Board(roh){
+  const x=w11Norm(roh);if(x.trim().length<2)return null;const R=(s,t)=>({s,t});let m;
+  m=x.match(/\blga\s*-?\s*(775|1156|1155|1150|1366|2011|2066)\b|\bam[23]\+?\b|\bfm[12]\+?\b|\bsocket\s*(478|754|939|940|am2|am3)\b|\bpga\s*988\b|\bs?478\b/);
+  if(m)return R('nein','Sockel '+m[0].toUpperCase().trim()+' ist zu alt für Windows 11');
+  if(/\blga\s*-?\s*(1200|1700|1851)\b/.test(x)||/\bam5\b/.test(x))return R('ja','Sockel ist aktuell genug – der Prozessor entscheidet');
+  if(/\blga\s*-?\s*1151\b/.test(x))return R('?','LGA1151: 6./7. Generation nein, 8./9. Generation ja – Chipsatz/Prozessor prüfen');
+  if(/\bam4\b/.test(x))return R('?','AM4: Ryzen 1000 nein, ab Ryzen 2000 ja – Prozessor prüfen');
+  m=x.match(/\b(h81|b85|h87|z87|h97|z97|q87|q85|b75|h77|z77|z68|p67|h67|h61|q67|q77|b65|h55|p55|h57|q57|p45|g41|g31|g33|g43|x58|x79|x99|x299|h110|b150|h170|z170|q150|q170|b250|h270|z270|q250|q270|a320|b350|x370|a300|b300|x300|760g|880g|990fx|785g|790x)[a-z]{0,2}\b/);
+  if(m){const c=m[1];
+    if(/^(a320|b350|x370|a300|b300|x300)$/.test(c))return R('?','Chipsatz '+c.toUpperCase()+': kann Ryzen 1000 (nein) oder 2000+ (ja) – Prozessor prüfen');
+    return R('nein','Chipsatz '+c.toUpperCase()+' gehört zu einer Generation, die Windows 11 nicht unterstützt')}
+  m=x.match(/\b(h310|b360|h370|z370|q370|b365|z390|c246|h410|b460|h470|z490|q470|w480|h510|b560|h570|z590|w580|h610|b660|h670|z690|q670|w680|b760|h770|z790|b860|z890|h810|b450|x470|a520|b550|x570|a620|b650|x670|b840|b850|x870)[a-z]{0,2}\b/);
+  if(m)return R('ja','Chipsatz '+m[1].toUpperCase()+' passt zu Windows-11-fähigen Prozessoren');
+  return null}
+
+function w11Gesamt(t){
+  const art=String(t.art||'').toLowerCase();
+  const istCpu=/prozessor|\bcpu\b/.test(art),istBoard=/mainboard|motherboard|mutterplatine/.test(art);
+  if(!istCpu&&!istBoard)return null;
+  const basis=istCpu?w11Cpu([t.hersteller,t.modell].filter(Boolean).join(' ')):w11Board([t.hersteller,t.modell,t.eigenschaften].filter(Boolean).join(' '));
+  if(!basis)return null;
+  const R=(s,x)=>({s,t:x});
+  if(basis.s==='nein')return R('nein',basis.t);
+  if(basis.s==='?')return R('?',basis.t);
+  const tpm=t.tpm||'',sb=t.secureboot||'';
+  if(tpm==='nein'||sb==='nein'){
+    const was=tpm==='nein'&&sb==='nein'?'TPM 2.0 und Secure Boot fehlen':tpm==='nein'?'TPM 2.0 fehlt':'Secure Boot/UEFI fehlt';
+    return R('bedingt',(istCpu?'Prozessor ok':'Board ok')+', aber '+was+' – evtl. im BIOS aktivierbar (fTPM/PTT)')}
+  if(tpm==='ja'&&sb==='ja'&&istCpu)return R('ja','Prozessor, TPM 2.0 und Secure Boot passen');
+  return R('cpu',basis.t+' – '+(istCpu?'TPM 2.0 und Secure Boot':'Prozessor, TPM 2.0 und Secure Boot')+' noch prüfen')}
+const W11_TEXT={ja:'✔ Windows-11-fähig',cpu:'✔ Bisher in Ordnung',bedingt:'⚠ Nur mit Änderung',nein:'✘ Nicht Windows-11-fähig','?':'? Bitte prüfen'};
+if(typeof module!=='undefined')module.exports={w11Cpu,w11Board,w11Gesamt};
 'use strict';
 /* ---------- Konstanten ---------- */
 const TYPEN=['Windows-Rechner','Laptop','Server','Mac','Tablet','Smartphone','Drucker','Router','Firewall','Telefonanlage','NUC','Netzwerkgerät','Sonstiges'];
@@ -581,7 +739,7 @@ const INV_STATUS=['Ungetestet','Funktioniert','Defekt'];
 const INV_FELDER=['art','hersteller','modell','eigenschaften','seriennr','herkunft','verwendung','status','notiz'];
 function neuesTeil(){const l=ls('inv_letzte')||{};
   return {uid:neueId(),art:l.art||'',hersteller:'',modell:'',eigenschaften:'',seriennr:'',herkunft:l.herkunft||'',
-    verwendung:INV_VERW[0],status:INV_STATUS[0],notiz:'',datum:heute(),fotos:[],geaendert:Date.now(),exportiert:0}}
+    verwendung:INV_VERW[0],status:INV_STATUS[0],notiz:'',tpm:'',secureboot:'',datum:heute(),fotos:[],geaendert:Date.now(),exportiert:0}}
 let invTimer=null;
 function invSpeichernSpaeter(){if(!curT)return;curT.geaendert=Date.now();clearTimeout(invTimer);
   ls('inv_letzte',{art:curT.art,herkunft:curT.herkunft});
@@ -612,6 +770,7 @@ async function zeigeInventar(neuAnzeigen){
               h('span',{class:'hinweis'},[t.eigenschaften,t.herkunft,(t.fotos||[]).length+' Foto(s)'].filter(Boolean).join(' · ')),' ',
               h('span',{class:'badge'+(t.status==='Funktioniert'?' ok':t.status==='Defekt'?' warn':'')},t.status),' ',
               t.verwendung&&t.verwendung!=='Offen'?h('span',{class:'badge'},t.verwendung):null,' ',
+              (g=>g?h('span',{class:'badge'+(g.s==='nein'?' warn':g.s==='ja'||g.s==='cpu'?' ok':'')},'Win 11 '+(g.s==='nein'?'✘':g.s==='?'?'?':g.s==='bedingt'?'⚠':'✔')):null)(w11Gesamt(t)),' ',
               t.geaendert>(t.exportiert||0)?h('span',{class:'badge warn'},'nicht exportiert'):null)))})
       :h('div',{class:'leer'},liste.length?'Nichts gefunden.':'Noch keine Teile.',h('br'),liste.length?'':'Tippe unten auf „Neues Teil“.'),
       liste.length?h('div',{class:'row',style:'margin-top:8px'},
@@ -633,6 +792,15 @@ function zeigeTeil(neuAnzeigen){
   if(neuAnzeigen){try{history.pushState({v:'invedit'},'','#invedit')}catch(e){}}
   const t=curT;
   const fotos=h('div',{id:'fotos'});
+  const w11Box=h('div',{id:'w11box'});
+  const w11Wahl=(label,key)=>{const id='f'+(++zaehler);
+    const sel=h('select',{id},[['','unbekannt'],['ja','ja'],['nein','nein']].map(([v,l])=>h('option',{value:v},l)));
+    sel.value=t[key]||'';sel.addEventListener('change',()=>{t[key]=sel.value;w11Zeichnen();speichern()});
+    return h('div',{class:'field'},h('label',{for:id},label),sel)};
+  const w11Opt=h('div',{class:'grid2'},w11Wahl('TPM 2.0','tpm'),w11Wahl('Secure Boot / UEFI','secureboot'));
+  const w11Zeichnen=()=>{const g=w11Gesamt(t),a=(t.art||'').toLowerCase();
+    w11Opt.style.display=/prozessor|\bcpu\b|mainboard|motherboard|mutterplatine/.test(a)?'':'none';
+    ersetze(w11Box,g?h('div',{class:'w11 '+(g.s==='?'?'q':g.s)},h('b',{},W11_TEXT[g.s]),h('span',{class:'hinweis'},g.t+' · '+W11_STAND)):null)};
   const fotosZeichnen=()=>{ersetze(fotos,
     t.fotos.map((f,i)=>h('div',{class:'foto'},h('img',{src:f.daten,alt:''}),
       h('div',{class:'grow',style:'flex:1'},feld('Beschriftung (z. B. Typenschild)',f,'text'),
@@ -650,10 +818,11 @@ function zeigeTeil(neuAnzeigen){
     h('div',{class:'wrap'},
       h('div',{class:'card'},fotos),
       h('div',{class:'card'},
-        feld('Um was handelt es sich?',t,'art',{list:'dl-invart',on:()=>{$('#titel').textContent=teilTitel(t)}}),
-        feld('Hersteller',t,'hersteller',{on:()=>{$('#titel').textContent=teilTitel(t)}}),
-        feld('Modell',t,'modell',{on:()=>{$('#titel').textContent=teilTitel(t)}}),
-        feld('Eigenschaften (z. B. 450 W, 24-polig)',t,'eigenschaften',{area:true,rows:2}),
+        feld('Um was handelt es sich?',t,'art',{list:'dl-invart',on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
+        feld('Hersteller',t,'hersteller',{on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
+        feld('Modell',t,'modell',{on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
+        w11Box,w11Opt,
+        feld('Eigenschaften (z. B. 450 W, 24-polig)',t,'eigenschaften',{area:true,rows:2,on:()=>w11Zeichnen()}),
         feld('Seriennummer',t,'seriennr',{scan:true}),
         feld('Herkunft (Rechner / Kunde)',t,'herkunft'),
         h('div',{class:'grid2'},auswahl('Verwendung',t,'verwendung',INV_VERW),auswahl('Status',t,'status',INV_STATUS)),
@@ -661,7 +830,7 @@ function zeigeTeil(neuAnzeigen){
     h('div',{class:'fuss'},h('button',{class:'btn',onclick:teilZurueck},'Fertig'),
       h('button',{class:'btn primary',onclick:async()=>{if(teilLeer(curT)){toast('Erst Foto oder Angaben eintragen');return}await invSofort();const alt=curT;curT=neuesTeil();curT.herkunft=alt.herkunft;curT.art=alt.art;await invSichern(curT);zeigeTeil(false);toast('Nächstes Teil')}},'＋ Nächstes Teil')),
     h('div',{},h('datalist',{id:'dl-invart'},INV_ARTEN.map(o=>h('option',{value:o})))));
-  fotosZeichnen()}
+  fotosZeichnen();w11Zeichnen()}
 const INV_GRENZE=14*1024*1024;
 async function invExport(alleTeile){
   const liste=((await invAlle())||[]).sort((a,b)=>a.datum.localeCompare(b.datum)||a.geaendert-b.geaendert);
@@ -677,7 +846,7 @@ async function invExport(alleTeile){
     const name='Inventar_'+stempel+(pakete.length>1?'_Teil'+(i+1):'')+'.json';
     const o={format:'dats-inventar',version:1,exportiert:d.toISOString(),teile:pakete[i].map(t=>({uid:t.uid,datum:t.datum,geaendert:t.geaendert,
       art:t.art,hersteller:t.hersteller,modell:t.modell,eigenschaften:t.eigenschaften,seriennr:t.seriennr,herkunft:t.herkunft,
-      verwendung:t.verwendung,status:t.status,notiz:t.notiz,fotos:(t.fotos||[]).map(f=>({id:f.id,text:f.text||'',daten:f.daten}))}))};
+      verwendung:t.verwendung,status:t.status,notiz:t.notiz,tpm:t.tpm||'',secureboot:t.secureboot||'',fotos:(t.fotos||[]).map(f=>({id:f.id,text:f.text||'',daten:f.daten}))}))};
     const a=h('a',{href:URL.createObjectURL(new Blob([JSON.stringify(o)],{type:'application/json'})),download:name});
     document.body.append(a);a.click();
     setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
