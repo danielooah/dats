@@ -737,8 +737,25 @@ const INV_ARTEN=['Netzteil','Mainboard','Arbeitsspeicher (RAM)','Festplatte (HDD
 const INV_VERW=['Offen','Behalten','Verkaufen','Entsorgen'];
 const INV_STATUS=['Ungetestet','Funktioniert','Defekt'];
 const INV_FELDER=['art','hersteller','modell','eigenschaften','seriennr','herkunft','verwendung','status','notiz'];
+const INV_STANDARD='Allgemein';
+const teilListe=t=>(t.liste&&String(t.liste).trim())||INV_STANDARD;
+/* Alle bekannten Listen: gemerkte Listen + Listen der Teile + „Allgemein“ (ohne doppelte Namen) */
+function invListen(teile){const m=new Map();
+  const add=(n,hk)=>{n=String(n||'').replace(/\s+/g,' ').trim().slice(0,60);if(!n)return;const k=n.toLowerCase();
+    if(!m.has(k))m.set(k,{name:n,herkunft:hk||''});else if(hk&&!m.get(k).herkunft)m.get(k).herkunft=hk};
+  add(INV_STANDARD);(ls('inv_listen')||[]).forEach(x=>add(x.name,x.herkunft));(teile||[]).forEach(t=>add(teilListe(t)));
+  return [...m.values()].sort((a,b)=>(b.name.toLowerCase()===INV_STANDARD.toLowerCase())-(a.name.toLowerCase()===INV_STANDARD.toLowerCase())||a.name.localeCompare(b.name,'de'))}
+const invAktiv=()=>ls('inv_aktiv')||'';
+function listeMerken(name,herkunft){const l=(ls('inv_listen')||[]).filter(x=>x.name.toLowerCase()!==name.toLowerCase());l.push({name,herkunft:herkunft||''});ls('inv_listen',l)}
+async function listeNeuAnlegen(){
+  const n=(prompt('Name der neuen Liste (z. B. „Rechner Kunde X“ oder „Netzteile gesammelt“):')||'').replace(/\s+/g,' ').trim().slice(0,60);
+  if(!n)return;
+  const hk=(prompt('Herkunft für neue Teile in dieser Liste (z. B. Kundenname) – leer lassen, wenn nicht nötig:')||'').trim();
+  const vorh=invListen(await invAlle().catch(()=>[])).find(x=>x.name.toLowerCase()===n.toLowerCase());
+  const name=vorh?vorh.name:n;listeMerken(name,vorh&&vorh.herkunft?vorh.herkunft:hk);ls('inv_aktiv',name);zeigeInventar(false)}
 function neuesTeil(){const l=ls('inv_letzte')||{};
-  return {uid:neueId(),art:l.art||'',hersteller:'',modell:'',eigenschaften:'',seriennr:'',herkunft:l.herkunft||'',
+  const akt=invAktiv()||INV_STANDARD;const li=invListen([]).find(x=>x.name.toLowerCase()===akt.toLowerCase());
+  return {uid:neueId(),liste:li?li.name:akt,art:l.art||'',hersteller:'',modell:'',eigenschaften:'',seriennr:'',herkunft:(li&&li.herkunft)||(akt.toLowerCase()===INV_STANDARD.toLowerCase()?(l.herkunft||''):''),
     verwendung:INV_VERW[0],status:INV_STATUS[0],notiz:'',tpm:'',secureboot:'',datum:heute(),fotos:[],geaendert:Date.now(),exportiert:0}}
 let invTimer=null;
 function invSpeichernSpaeter(){if(!curT)return;curT.geaendert=Date.now();clearTimeout(invTimer);
@@ -752,8 +769,15 @@ async function zeigeInventar(neuAnzeigen){
   if(neuAnzeigen){try{history.pushState({v:'inv'},'','#inv')}catch(e){}}
   const liste=((await invAlle().catch(()=>[]))||[]).sort((a,b)=>b.geaendert-a.geaendert);
   const offen=liste.filter(t=>t.geaendert>(t.exportiert||0));
+  const alleListen=invListen(liste);let aktiv=invAktiv();
+  if(aktiv&&!alleListen.some(x=>x.name.toLowerCase()===aktiv.toLowerCase())){aktiv='';ls('inv_aktiv','')}
+  const inListe=aktiv?liste.filter(t=>teilListe(t).toLowerCase()===aktiv.toLowerCase()):liste;
+  const wahl=h('select',{id:'invliste',style:'flex:1;min-width:0'},h('option',{value:''},'Alle Listen ('+liste.length+')'),
+    alleListen.map(x=>h('option',{value:x.name},x.name+' ('+liste.filter(t=>teilListe(t).toLowerCase()===x.name.toLowerCase()).length+')')));
+  wahl.value=aktiv;
+  wahl.addEventListener('change',()=>{ls('inv_aktiv',wahl.value);zeigeInventar(false)});
   const q=invFilter.trim().toLowerCase();
-  const sicht=q?liste.filter(t=>[t.art,t.hersteller,t.modell,t.eigenschaften,t.seriennr,t.herkunft,t.status,t.verwendung,t.notiz].join(' ').toLowerCase().includes(q)):liste;
+  const sicht=q?inListe.filter(t=>[t.art,t.hersteller,t.modell,t.eigenschaften,t.seriennr,t.herkunft,t.status,t.verwendung,t.notiz].join(' ').toLowerCase().includes(q)):inListe;
   const such=h('input',{type:'search',placeholder:'Suchen …',value:invFilter,style:'margin-bottom:10px'});
   such.addEventListener('input',()=>{invFilter=such.value;clearTimeout(zeigeInventar.t);zeigeInventar.t=setTimeout(()=>zeigeInventar(false),250)});
   $('#app').replaceChildren(
@@ -761,18 +785,19 @@ async function zeigeInventar(neuAnzeigen){
       h('h1',{},logo(),h('span',{class:'t'},'Inventar'))),
     h('div',{class:'wrap'},
       offen.length?h('div',{class:'banner'},h('b',{},offen.length+' Teil(e) noch nicht exportiert. '),'Exportiere sie, bevor du sie im Büro einliest – so ist auch alles gesichert.'):null,
+      h('div',{class:'row',style:'flex-wrap:nowrap;margin-bottom:10px'},wahl,h('button',{class:'btn klein',onclick:listeNeuAnlegen},'＋ Liste')),
       liste.length?such:null,
       sicht.length?sicht.map(t=>{const klasse=t.status==='Funktioniert'?'fertig':t.status==='Defekt'?'defekt':'';
         return h('button',{class:'karte-liste '+klasse,onclick:()=>oeffneTeil(t.uid)},
           h('div',{class:'row',style:'flex-wrap:nowrap'},
             t.fotos&&t.fotos[0]?h('img',{src:t.fotos[0].daten,alt:'',style:'width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none'}):null,
             h('div',{style:'min-width:0'},h('b',{},teilTitel(t)),
-              h('span',{class:'hinweis'},[t.eigenschaften,t.herkunft,(t.fotos||[]).length+' Foto(s)'].filter(Boolean).join(' · ')),' ',
+              h('span',{class:'hinweis'},[aktiv?'':teilListe(t),t.eigenschaften,t.herkunft,(t.fotos||[]).length+' Foto(s)'].filter(Boolean).join(' · ')),' ',
               h('span',{class:'badge'+(t.status==='Funktioniert'?' ok':t.status==='Defekt'?' warn':'')},t.status),' ',
               t.verwendung&&t.verwendung!=='Offen'?h('span',{class:'badge'},t.verwendung):null,' ',
               (g=>g?h('span',{class:'badge'+(g.s==='nein'?' warn':g.s==='ja'||g.s==='cpu'?' ok':'')},'Win 11 '+(g.s==='nein'?'✘':g.s==='?'?'?':g.s==='bedingt'?'⚠':'✔')):null)(w11Gesamt(t)),' ',
               t.geaendert>(t.exportiert||0)?h('span',{class:'badge warn'},'nicht exportiert'):null)))})
-      :h('div',{class:'leer'},liste.length?'Nichts gefunden.':'Noch keine Teile.',h('br'),liste.length?'':'Tippe unten auf „Neues Teil“.'),
+      :h('div',{class:'leer'},liste.length?'Nichts gefunden.':'Noch keine Teile.',h('br'),liste.length?(aktiv?'In dieser Liste ist noch nichts.':''):'Tippe unten auf „Neues Teil“.'),
       liste.length?h('div',{class:'row',style:'margin-top:8px'},
         h('button',{class:'btn klein',onclick:()=>invExport(false)},'Neue/geänderte exportieren'),
         h('button',{class:'btn klein',onclick:()=>invExport(true)},'Alle exportieren')):null),
@@ -793,6 +818,11 @@ function zeigeTeil(neuAnzeigen){
   const t=curT;
   const fotos=h('div',{id:'fotos'});
   const w11Box=h('div',{id:'w11box'});
+  const listeWahl=t=>{const id='f'+(++zaehler);const namen=invListen([t]);
+    const sel=h('select',{id},namen.map(x=>h('option',{value:x.name},x.name)));
+    sel.value=teilListe(t);t.liste=sel.value;
+    sel.addEventListener('change',()=>{t.liste=sel.value;ls('inv_aktiv',invAktiv()?sel.value:'');invSpeichernSpaeter()});
+    return h('div',{class:'field'},h('label',{for:id},'Liste'),sel)};
   const w11Wahl=(label,key)=>{const id='f'+(++zaehler);
     const sel=h('select',{id},[['','unbekannt'],['ja','ja'],['nein','nein']].map(([v,l])=>h('option',{value:v},l)));
     sel.value=t[key]||'';sel.addEventListener('change',()=>{t[key]=sel.value;w11Zeichnen();speichern()});
@@ -818,6 +848,7 @@ function zeigeTeil(neuAnzeigen){
     h('div',{class:'wrap'},
       h('div',{class:'card'},fotos),
       h('div',{class:'card'},
+        listeWahl(t),
         feld('Um was handelt es sich?',t,'art',{list:'dl-invart',on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
         feld('Hersteller',t,'hersteller',{on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
         feld('Modell',t,'modell',{on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
@@ -844,7 +875,7 @@ async function invExport(alleTeile){
   const d=new Date(),stempel=heute()+'_'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0');
   for(let i=0;i<pakete.length;i++){
     const name='Inventar_'+stempel+(pakete.length>1?'_Teil'+(i+1):'')+'.json';
-    const o={format:'dats-inventar',version:1,exportiert:d.toISOString(),teile:pakete[i].map(t=>({uid:t.uid,datum:t.datum,geaendert:t.geaendert,
+    const o={format:'dats-inventar',version:1,exportiert:d.toISOString(),listen:invListen(liste).map(x=>({name:x.name,herkunft:x.herkunft})),teile:pakete[i].map(t=>({uid:t.uid,liste:teilListe(t),datum:t.datum,geaendert:t.geaendert,
       art:t.art,hersteller:t.hersteller,modell:t.modell,eigenschaften:t.eigenschaften,seriennr:t.seriennr,herkunft:t.herkunft,
       verwendung:t.verwendung,status:t.status,notiz:t.notiz,tpm:t.tpm||'',secureboot:t.secureboot||'',fotos:(t.fotos||[]).map(f=>({id:f.id,text:f.text||'',daten:f.daten}))}))};
     const a=h('a',{href:URL.createObjectURL(new Blob([JSON.stringify(o)],{type:'application/json'})),download:name});
