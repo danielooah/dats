@@ -399,7 +399,7 @@ async function oeffne(uid){const l=await alle();cur=l.find(e=>e.uid===uid);if(!c
 function zurueck(){sofortSpeichern().then(()=>{if(history.state&&history.state.v==='edit')history.back();else zeigeListe()})}
 window.addEventListener('popstate',()=>{
   if(ansicht==='invedit'){invSofort().then(()=>zeigeInventar(false))}
-  else if(ansicht==='inv'){zeigeListe()}
+  else if(ansicht==='inv'){if(!invUeb){invListeGepusht=false;invUeb=true;zeigeInventar(false)}else zeigeListe()}
   else sofortSpeichern().then(zeigeListe)});
 
 /* ---------- Gäste-WLAN: Felder erscheinen erst nach dem Haken ---------- */
@@ -752,7 +752,7 @@ async function listeNeuAnlegen(){
   if(!n)return;
   const hk=(prompt('Herkunft für neue Teile in dieser Liste (z. B. Kundenname) – leer lassen, wenn nicht nötig:')||'').trim();
   const vorh=invListen(await invAlle().catch(()=>[])).find(x=>x.name.toLowerCase()===n.toLowerCase());
-  const name=vorh?vorh.name:n;listeMerken(name,vorh&&vorh.herkunft?vorh.herkunft:hk);ls('inv_aktiv',name);zeigeInventar(false)}
+  const name=vorh?vorh.name:n;listeMerken(name,vorh&&vorh.herkunft?vorh.herkunft:hk);invListeOeffnen(name)}
 function neuesTeil(){const l=ls('inv_letzte')||{};
   const akt=invAktiv()||INV_STANDARD;const li=invListen([]).find(x=>x.name.toLowerCase()===akt.toLowerCase());
   return {uid:neueId(),liste:li?li.name:akt,art:l.art||'',hersteller:'',modell:'',eigenschaften:'',seriennr:'',herkunft:(li&&li.herkunft)||(akt.toLowerCase()===INV_STANDARD.toLowerCase()?(l.herkunft||''):''),
@@ -769,13 +769,33 @@ function invSpeichernSpaeter(){if(!curT)return;curT.geaendert=Date.now();clearTi
 function invSofort(){if(!curT)return Promise.resolve();clearTimeout(invTimer);return invSichern(curT)}
 const teilTitel=t=>[t.art,[t.hersteller,t.modell].filter(Boolean).join(' ')].filter(Boolean).join(' – ')||'Neues Teil';
 let invFilter='';
+let invUeb=true,invListeGepusht=false;
+function invListeOeffnen(name){ls('inv_aktiv',name||'');invUeb=false;invFilter='';
+  try{history.pushState({v:'inv'},'','#inv');invListeGepusht=true}catch(e){invListeGepusht=false}zeigeInventar(false)}
 async function zeigeInventar(neuAnzeigen){
   curT=null;ansicht='inv';
-  if(neuAnzeigen){try{history.pushState({v:'inv'},'','#inv')}catch(e){}}
+  if(neuAnzeigen){invUeb=true;invListeGepusht=false;try{history.pushState({v:'inv'},'','#inv')}catch(e){}}
   const liste=((await invAlle().catch(()=>[]))||[]).sort((a,b)=>teilListe(a).toLowerCase().localeCompare(teilListe(b).toLowerCase(),'de')||teilCmp(a,b));
   const offen=liste.filter(t=>t.geaendert>(t.exportiert||0));
   const alleListen=invListen(liste);let aktiv=invAktiv();
   if(aktiv&&!alleListen.some(x=>x.name.toLowerCase()===aktiv.toLowerCase())){aktiv='';ls('inv_aktiv','')}
+  if(invUeb){
+    const zaehl=l=>{const z=liste.filter(t=>teilListe(t).toLowerCase()===l.toLowerCase());
+      return [z.length+' Teil(e)',z.filter(t=>t.status==='Funktioniert').length+' ✔',z.filter(t=>t.status==='Defekt').length+' ✘',z.filter(t=>t.status==='Ungetestet').length+' ungetestet']};
+    $('#app').replaceChildren(
+      h('div',{class:'bar'},h('button',{class:'icon',onclick:invZurueck,title:'Zurück'},'←'),
+        h('h1',{},logo(),h('span',{class:'t'},'Inventar'))),
+      h('div',{class:'wrap'},
+        offen.length?h('div',{class:'banner'},h('b',{},offen.length+' Teil(e) noch nicht exportiert. '),'Exportiere sie, bevor du sie im Büro einliest – so ist auch alles gesichert.'):null,
+        h('div',{class:'hinweis',style:'margin-bottom:8px'},'Tippe auf eine Liste, um ihre Teile zu sehen.'),
+        alleListen.map(x=>h('button',{class:'karte-liste',onclick:()=>invListeOeffnen(x.name)},
+          h('b',{},x.name),h('span',{class:'hinweis'},zaehl(x.name).join(' · ')+(x.herkunft?' · Herkunft: '+x.herkunft:'')))),
+        h('button',{class:'karte-liste',onclick:()=>invListeOeffnen('')},h('b',{},'Alle Teile'),h('span',{class:'hinweis'},liste.length+' Teil(e) aus allen Listen')),
+        liste.length?h('div',{class:'row',style:'margin-top:8px'},
+          h('button',{class:'btn klein',onclick:()=>invExport(false)},'Neue/geänderte exportieren'),
+          h('button',{class:'btn klein',onclick:()=>invExport(true)},'Alle exportieren')):null),
+      h('div',{class:'fuss'},h('button',{class:'btn primary',onclick:listeNeuAnlegen},'＋ Neue Liste')),listen());
+    return}
   const inListe=aktiv?liste.filter(t=>teilListe(t).toLowerCase()===aktiv.toLowerCase()):liste;
   const wahl=h('select',{id:'invliste',style:'flex:1;min-width:0'},h('option',{value:''},'Alle Listen ('+liste.length+')'),
     alleListen.map(x=>h('option',{value:x.name},x.name+' ('+liste.filter(t=>teilListe(t).toLowerCase()===x.name.toLowerCase()).length+')')));
@@ -808,7 +828,7 @@ async function zeigeInventar(neuAnzeigen){
         h('button',{class:'btn klein',onclick:()=>invExport(true)},'Alle exportieren')):null),
     h('div',{class:'fuss'},h('button',{class:'btn primary',onclick:neuesTeilAnlegen},'＋ Neues Teil')),listen());
   if(q)such.focus()}
-function invZurueck(){if(history.state&&history.state.v==='inv')history.back();else zeigeListe()}
+function invZurueck(){if(!invUeb){if(invListeGepusht){invListeGepusht=false;history.back()}else{invUeb=true;zeigeInventar(false)}}else if(history.state&&history.state.v==='inv')history.back();else zeigeListe()}
 async function neuesTeilAnlegen(){curT=neuesTeil();await invSichern(curT);zeigeTeil(true)}
 async function oeffneTeil(uid){curT=((await invAlle())||[]).find(t=>t.uid===uid);if(!curT)return;zeigeTeil(true)}
 const teilLeer=t=>!(t.fotos&&t.fotos.length)&&(!t.hersteller||t.hersteller===t._hk)&&!t.modell&&!t.eigenschaften&&!t.seriennr&&!t.notiz;
