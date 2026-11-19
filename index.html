@@ -748,12 +748,24 @@ function invListen(teile){const m=new Map();
   return [...m.values()].sort((a,b)=>(b.name.toLowerCase()===INV_STANDARD.toLowerCase())-(a.name.toLowerCase()===INV_STANDARD.toLowerCase())||a.name.localeCompare(b.name,'de'))}
 const invAktiv=()=>ls('inv_aktiv')||'';
 function listeMerken(name,herkunft){const l=(ls('inv_listen')||[]).filter(x=>x.name.toLowerCase()!==name.toLowerCase());l.push({name,herkunft:herkunft||''});ls('inv_listen',l)}
-async function listeNeuAnlegen(){
-  const n=(prompt('Name der neuen Liste (z. B. „Rechner Kunde X“ oder „Netzteile gesammelt“):')||'').replace(/\s+/g,' ').trim().slice(0,60);
-  if(!n)return;
-  const hk=(prompt('Herkunft für neue Teile in dieser Liste (z. B. Kundenname) – leer lassen, wenn nicht nötig:')||'').trim();
-  const vorh=invListen(await invAlle().catch(()=>[])).find(x=>x.name.toLowerCase()===n.toLowerCase());
-  const name=vorh?vorh.name:n;listeMerken(name,vorh&&vorh.herkunft?vorh.herkunft:hk);invListeOeffnen(name)}
+function listeNeuAnlegen(){
+  const fn=h('input',{type:'text',maxlength:60,placeholder:'z. B. Rechner Kunde X',autocomplete:'off'});
+  const fh=h('input',{type:'text',maxlength:60,placeholder:'z. B. Kundenname (optional)',autocomplete:'off'});
+  const ok=async()=>{
+    const n=fn.value.replace(/\s+/g,' ').trim().slice(0,60);
+    if(!n){toast('Bitte einen Namen eingeben');fn.focus();return}
+    const hk=fh.value.trim();
+    const vorh=invListen(await invAlle().catch(()=>[])).find(x=>x.name.toLowerCase()===n.toLowerCase());
+    const name=vorh?vorh.name:n;listeMerken(name,vorh&&vorh.herkunft?vorh.herkunft:hk);invListeOeffnen(name)};
+  $('#app').replaceChildren(
+    h('div',{class:'bar'},h('button',{class:'icon',title:'Zurück',onclick:()=>zeigeInventar(false)},'←'),
+      h('h1',{},logo(),h('span',{class:'t'},'Neue Liste'))),
+    h('div',{class:'wrap'},
+      h('div',{class:'field'},h('label',{},'Name der Liste'),fn),
+      h('div',{class:'field'},h('label',{},'Herkunft für neue Teile (optional)'),fh),
+      h('div',{class:'hinweis'},'Die Herkunft wird bei jedem neuen Teil dieser Liste vorgetragen.')),
+    h('div',{class:'fuss'},h('button',{class:'btn primary',onclick:ok},'Liste anlegen')));
+  setTimeout(()=>fn.focus(),50)}
 function neuesTeil(){const l=ls('inv_letzte')||{};
   const akt=invAktiv()||INV_STANDARD;const li=invListen([]).find(x=>x.name.toLowerCase()===akt.toLowerCase());
   return {uid:neueId(),liste:li?li.name:akt,art:l.art||'',hersteller:'',modell:'',eigenschaften:'',seriennr:'',herkunft:(li&&li.herkunft)||(akt.toLowerCase()===INV_STANDARD.toLowerCase()?(l.herkunft||''):''),
