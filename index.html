@@ -765,12 +765,12 @@ function natCmp(a,b){const x=natKey(a),y=natKey(b);for(let i=0;i<Math.min(x.leng
 const W11_RANG={ja:0,cpu:0,bedingt:1,nein:2,'?':3};
 const W11_GRUPPEN=['Windows-11-fähig','Bedingt – Mainboard/TPM prüfen','Nicht Windows-11-fähig','Unklar – bitte prüfen'];
 const w11Rang=t=>{const g=w11Gesamt(t);if(!g)return null;const r=W11_RANG[g.s];return r===undefined?3:r};
-function gruppiert(teile,els){const out=[];let i=0;
+function gruppiert(teile,els,ohneArt){const out=[];let i=0;
   while(i<teile.length){const r=w11Rang(teile[i]);
     if(r===null){out.push(els[i]);i++;continue}
     const art=(teile[i].art||'').trim().toLowerCase();let j=i;
     while(j<teile.length&&w11Rang(teile[j])===r&&(teile[j].art||'').trim().toLowerCase()===art)j++;
-    out.push(h('div',{class:'gruppe'},(teile[i].art||'').trim()+' – '+W11_GRUPPEN[r]+' ('+(j-i)+')'));
+    out.push(h('div',{class:'gruppe'},(ohneArt?'':(teile[i].art||'').trim()+' – ')+W11_GRUPPEN[r]+' ('+(j-i)+')'));
     for(let k=i;k<j;k++)out.push(els[k]);i=j}
   return out}
 const teilCmp=(a,b)=>(a.art||'').toLowerCase().localeCompare((b.art||'').toLowerCase(),'de')||((w11Rang(a)===null?9:w11Rang(a))-(w11Rang(b)===null?9:w11Rang(b)))||(a.hersteller||'').toLowerCase().localeCompare((b.hersteller||'').toLowerCase(),'de')||natCmp(a.modell,b.modell)||(a.datum||'').localeCompare(b.datum||'')||(a.geaendert-b.geaendert);
@@ -779,7 +779,7 @@ function invSpeichernSpaeter(){if(!curT)return;curT.geaendert=Date.now();clearTi
   ls('inv_letzte',{art:curT.art,herkunft:curT.herkunft});
   invTimer=setTimeout(()=>invSichern(curT).catch(()=>toast('Speichern nicht möglich')),300)}
 function invSofort(){if(!curT)return Promise.resolve();clearTimeout(invTimer);return invSichern(curT)}
-const teilTitel=t=>[t.art,[t.hersteller,t.modell].filter(Boolean).join(' ')].filter(Boolean).join(' – ')||'Neues Teil';
+const teilTitel=(t,ohneArt)=>[ohneArt?'':t.art,[t.hersteller,t.modell].filter(Boolean).join(' ')].filter(Boolean).join(' – ')||'Neues Teil';
 let invFilter='';
 let invUeb=true,invListeGepusht=false;
 function invListeOeffnen(name){ls('inv_aktiv',name||'');invUeb=false;invFilter='';
@@ -815,6 +815,8 @@ async function zeigeInventar(neuAnzeigen){
   wahl.addEventListener('change',()=>{ls('inv_aktiv',wahl.value);zeigeInventar(false)});
   const q=invFilter.trim().toLowerCase();
   const sicht=q?inListe.filter(t=>[t.art,t.hersteller,t.modell,t.eigenschaften,t.seriennr,t.herkunft,t.status,t.verwendung,t.notiz].join(' ').toLowerCase().includes(q)):inListe;
+  const artenS=new Set(sicht.map(t=>(t.art||'').trim().toLowerCase())),einzelArt=artenS.size===1&&!artenS.has('');
+  const herkS=new Set(sicht.map(t=>(t.herkunft||'').trim())),gleicheHerk=herkS.size===1&&!herkS.has('')&&sicht.length>1?[...herkS][0]:'';
   const such=h('input',{type:'search',placeholder:'Suchen …',value:invFilter,style:'margin-bottom:10px'});
   such.addEventListener('input',()=>{invFilter=such.value;clearTimeout(zeigeInventar.t);zeigeInventar.t=setTimeout(()=>zeigeInventar(false),250)});
   $('#app').replaceChildren(
@@ -824,16 +826,17 @@ async function zeigeInventar(neuAnzeigen){
       offen.length?h('div',{class:'banner'},h('b',{},offen.length+' Teil(e) noch nicht exportiert. '),'Exportiere sie, bevor du sie im Büro einliest – so ist auch alles gesichert.'):null,
       h('div',{class:'row',style:'flex-wrap:nowrap;margin-bottom:10px'},wahl,h('button',{class:'btn klein',onclick:listeNeuAnlegen},'＋ Liste')),
       liste.length?such:null,
+      (gleicheHerk?h('div',{class:'hinweis',style:'margin-bottom:8px'},'Herkunft: '+gleicheHerk):null),
       sicht.length?gruppiert(sicht,sicht.map(t=>{const klasse=t.status==='Funktioniert'?'fertig':t.status==='Defekt'?'defekt':'';
         return h('button',{class:'karte-liste '+klasse,onclick:()=>oeffneTeil(t.uid)},
           h('div',{class:'row',style:'flex-wrap:nowrap'},
             t.fotos&&t.fotos[0]?h('img',{src:t.fotos[0].daten,alt:'',style:'width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none'}):null,
-            h('div',{style:'min-width:0'},h('b',{},teilTitel(t)),
-              h('span',{class:'hinweis'},[aktiv?'':teilListe(t),t.eigenschaften,t.herkunft,(t.fotos||[]).length+' Foto(s)'].filter(Boolean).join(' · ')),' ',
+            h('div',{style:'min-width:0'},h('b',{},teilTitel(t,einzelArt)),
+              h('span',{class:'hinweis'},[aktiv?'':teilListe(t),t.eigenschaften,gleicheHerk?'':t.herkunft,(t.fotos||[]).length+' Foto(s)'].filter(Boolean).join(' · ')),' ',
               h('span',{class:'badge'+(t.status==='Funktioniert'?' ok':t.status==='Defekt'?' warn':'')},t.status),' ',
               t.verwendung&&t.verwendung!=='Offen'?h('span',{class:'badge'},t.verwendung):null,' ',
               (g=>g?h('span',{class:'badge'+(g.s==='nein'?' warn':g.s==='ja'||g.s==='cpu'?' ok':'')},'Win 11 '+(g.s==='nein'?'✘':g.s==='?'?'?':g.s==='bedingt'?'⚠':'✔')):null)(w11Gesamt(t)),' ',
-              t.geaendert>(t.exportiert||0)?h('span',{class:'badge warn'},'nicht exportiert'):null)))}))
+              t.geaendert>(t.exportiert||0)?h('span',{class:'badge warn'},'nicht exportiert'):null)))}),einzelArt)
       :h('div',{class:'leer'},liste.length?'Nichts gefunden.':'Noch keine Teile.',h('br'),liste.length?(aktiv?'In dieser Liste ist noch nichts.':''):'Tippe unten auf „Neues Teil“.'),
       liste.length?h('div',{class:'row',style:'margin-top:8px'},
         h('button',{class:'btn klein',onclick:()=>invExport(false)},'Neue/geänderte exportieren'),
