@@ -757,6 +757,11 @@ function neuesTeil(){const l=ls('inv_letzte')||{};
   const akt=invAktiv()||INV_STANDARD;const li=invListen([]).find(x=>x.name.toLowerCase()===akt.toLowerCase());
   return {uid:neueId(),liste:li?li.name:akt,art:l.art||'',hersteller:'',modell:'',eigenschaften:'',seriennr:'',herkunft:(li&&li.herkunft)||(akt.toLowerCase()===INV_STANDARD.toLowerCase()?(l.herkunft||''):''),
     verwendung:INV_VERW[0],status:INV_STATUS[0],notiz:'',tpm:'',secureboot:'',datum:heute(),fotos:[],geaendert:Date.now(),exportiert:0}}
+const INV_HERST=['Intel','AMD','NVIDIA','Seasonic','Corsair','be quiet!','Cooler Master','Fractal Design','Enermax','Super Flower','Chieftec','LC Power','Fortron','Delta','Thermaltake','Antec','Sharkoon','Xilence','SilverStone','EVGA','HP','Dell','Lenovo','Fujitsu','ASUS','Acer','MSI','Gigabyte','ASRock','Samsung','Kingston','Crucial','Western Digital','Seagate','Toshiba','Noctua','Zotac','Realtek','Qualcomm'];
+const herstellerNorm=n=>{const k=(n||'').trim().toLowerCase();if(k==='be quiet')return 'be quiet!';return INV_HERST.find(x=>x.toLowerCase()===k)||n};
+const natKey=s=>(s||'').toLowerCase().split(/(\d+)/).filter(x=>x!=='').map(x=>/^\d+$/.test(x)?[0,+x,'']:[1,0,x]);
+function natCmp(a,b){const x=natKey(a),y=natKey(b);for(let i=0;i<Math.min(x.length,y.length);i++){for(let j=0;j<3;j++){if(x[i][j]<y[i][j])return -1;if(x[i][j]>y[i][j])return 1}}return x.length-y.length}
+const teilCmp=(a,b)=>(a.art||'').toLowerCase().localeCompare((b.art||'').toLowerCase(),'de')||(a.hersteller||'').toLowerCase().localeCompare((b.hersteller||'').toLowerCase(),'de')||natCmp(a.modell,b.modell)||(a.datum||'').localeCompare(b.datum||'')||(a.geaendert-b.geaendert);
 let invTimer=null;
 function invSpeichernSpaeter(){if(!curT)return;curT.geaendert=Date.now();clearTimeout(invTimer);
   ls('inv_letzte',{art:curT.art,herkunft:curT.herkunft});
@@ -767,7 +772,7 @@ let invFilter='';
 async function zeigeInventar(neuAnzeigen){
   curT=null;ansicht='inv';
   if(neuAnzeigen){try{history.pushState({v:'inv'},'','#inv')}catch(e){}}
-  const liste=((await invAlle().catch(()=>[]))||[]).sort((a,b)=>b.geaendert-a.geaendert);
+  const liste=((await invAlle().catch(()=>[]))||[]).sort((a,b)=>teilListe(a).toLowerCase().localeCompare(teilListe(b).toLowerCase(),'de')||teilCmp(a,b));
   const offen=liste.filter(t=>t.geaendert>(t.exportiert||0));
   const alleListen=invListen(liste);let aktiv=invAktiv();
   if(aktiv&&!alleListen.some(x=>x.name.toLowerCase()===aktiv.toLowerCase())){aktiv='';ls('inv_aktiv','')}
@@ -806,7 +811,7 @@ async function zeigeInventar(neuAnzeigen){
 function invZurueck(){if(history.state&&history.state.v==='inv')history.back();else zeigeListe()}
 async function neuesTeilAnlegen(){curT=neuesTeil();await invSichern(curT);zeigeTeil(true)}
 async function oeffneTeil(uid){curT=((await invAlle())||[]).find(t=>t.uid===uid);if(!curT)return;zeigeTeil(true)}
-const teilLeer=t=>!(t.fotos&&t.fotos.length)&&!t.hersteller&&!t.modell&&!t.eigenschaften&&!t.seriennr&&!t.notiz;
+const teilLeer=t=>!(t.fotos&&t.fotos.length)&&(!t.hersteller||t.hersteller===t._hk)&&!t.modell&&!t.eigenschaften&&!t.seriennr&&!t.notiz;
 async function leeresTeilWeg(){if(curT&&teilLeer(curT)){clearTimeout(invTimer);const u=curT.uid;curT=null;await invLoeschen(u);return true}return false}
 function teilZurueck(){leeresTeilWeg().then(w=>w?null:invSofort()).then(()=>{if(history.state&&history.state.v==='invedit')history.back();else zeigeInventar(false)})}
 async function teilLoeschen(){if(!curT||!confirm('Dieses Teil mit allen Fotos löschen?'))return;
@@ -859,7 +864,7 @@ function zeigeTeil(neuAnzeigen){
         h('div',{class:'grid2'},auswahl('Verwendung',t,'verwendung',INV_VERW),auswahl('Status',t,'status',INV_STATUS)),
         feld('Notiz',t,'notiz',{area:true,rows:2}))),
     h('div',{class:'fuss'},h('button',{class:'btn',onclick:teilZurueck},'Fertig'),
-      h('button',{class:'btn primary',onclick:async()=>{if(teilLeer(curT)){toast('Erst Foto oder Angaben eintragen');return}await invSofort();const alt=curT;curT=neuesTeil();curT.herkunft=alt.herkunft;curT.art=alt.art;await invSichern(curT);zeigeTeil(false);toast('Nächstes Teil')}},'＋ Nächstes Teil')),
+      h('button',{class:'btn primary',onclick:async()=>{if(teilLeer(curT)){toast('Erst Foto oder Angaben eintragen');return}await invSofort();const alt=curT;curT=neuesTeil();curT.herkunft=alt.herkunft;curT.art=alt.art;curT.hersteller=herstellerNorm(alt.hersteller||'');curT._hk=curT.hersteller;curT.liste=alt.liste||curT.liste;await invSichern(curT);zeigeTeil(false);toast('Nächstes Teil');const mf=[...document.querySelectorAll('.field')].find(f=>f.querySelector('label')&&f.querySelector('label').textContent==='Modell');if(mf&&mf.querySelector('input'))mf.querySelector('input').focus()}},'＋ Nächstes Teil')),
     h('div',{},h('datalist',{id:'dl-invart'},INV_ARTEN.map(o=>h('option',{value:o})))));
   fotosZeichnen();w11Zeichnen()}
 const INV_GRENZE=14*1024*1024;
@@ -876,7 +881,7 @@ async function invExport(alleTeile){
   for(let i=0;i<pakete.length;i++){
     const name='Inventar_'+stempel+(pakete.length>1?'_Teil'+(i+1):'')+'.json';
     const o={format:'dats-inventar',version:1,exportiert:d.toISOString(),listen:invListen(liste).map(x=>({name:x.name,herkunft:x.herkunft})),teile:pakete[i].map(t=>({uid:t.uid,liste:teilListe(t),datum:t.datum,geaendert:t.geaendert,
-      art:t.art,hersteller:t.hersteller,modell:t.modell,eigenschaften:t.eigenschaften,seriennr:t.seriennr,herkunft:t.herkunft,
+      art:t.art,hersteller:herstellerNorm(t.hersteller),modell:t.modell,eigenschaften:t.eigenschaften,seriennr:t.seriennr,herkunft:t.herkunft,
       verwendung:t.verwendung,status:t.status,notiz:t.notiz,tpm:t.tpm||'',secureboot:t.secureboot||'',fotos:(t.fotos||[]).map(f=>({id:f.id,text:f.text||'',daten:f.daten}))}))};
     const a=h('a',{href:URL.createObjectURL(new Blob([JSON.stringify(o)],{type:'application/json'})),download:name});
     document.body.append(a);a.click();
