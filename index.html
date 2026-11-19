@@ -62,6 +62,7 @@ details>.inhalt{padding:0 14px 6px}
 .chip{flex:none;border:1px solid var(--rand);background:var(--card);border-radius:999px;padding:9px 16px;font-weight:600;cursor:pointer;max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip.aktiv{background:var(--akzent);color:var(--akzent-text);border-color:var(--akzent)}
 .hinweis{font-size:13px;color:var(--leicht)}
+.gruppe{font-weight:700;font-size:13px;margin:14px 2px 6px;color:var(--leicht)}
 .badge{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;background:var(--neutral)}
 .badge.warn{background:var(--marke);color:#fff}
 .badge.ok{background:var(--ok);color:#fff}
@@ -761,7 +762,18 @@ const INV_HERST=['Intel','AMD','NVIDIA','Seasonic','Corsair','be quiet!','Cooler
 const herstellerNorm=n=>{const k=(n||'').trim().toLowerCase();if(k==='be quiet')return 'be quiet!';return INV_HERST.find(x=>x.toLowerCase()===k)||n};
 const natKey=s=>(s||'').toLowerCase().split(/(\d+)/).filter(x=>x!=='').map(x=>/^\d+$/.test(x)?[0,+x,'']:[1,0,x]);
 function natCmp(a,b){const x=natKey(a),y=natKey(b);for(let i=0;i<Math.min(x.length,y.length);i++){for(let j=0;j<3;j++){if(x[i][j]<y[i][j])return -1;if(x[i][j]>y[i][j])return 1}}return x.length-y.length}
-const teilCmp=(a,b)=>(a.art||'').toLowerCase().localeCompare((b.art||'').toLowerCase(),'de')||(a.hersteller||'').toLowerCase().localeCompare((b.hersteller||'').toLowerCase(),'de')||natCmp(a.modell,b.modell)||(a.datum||'').localeCompare(b.datum||'')||(a.geaendert-b.geaendert);
+const W11_RANG={ja:0,cpu:0,bedingt:1,nein:2,'?':3};
+const W11_GRUPPEN=['Windows-11-fähig','Bedingt – Mainboard/TPM prüfen','Nicht Windows-11-fähig','Unklar – bitte prüfen'];
+const w11Rang=t=>{const g=w11Gesamt(t);if(!g)return null;const r=W11_RANG[g.s];return r===undefined?3:r};
+function gruppiert(teile,els){const out=[];let i=0;
+  while(i<teile.length){const r=w11Rang(teile[i]);
+    if(r===null){out.push(els[i]);i++;continue}
+    const art=(teile[i].art||'').trim().toLowerCase();let j=i;
+    while(j<teile.length&&w11Rang(teile[j])===r&&(teile[j].art||'').trim().toLowerCase()===art)j++;
+    out.push(h('div',{class:'gruppe'},(teile[i].art||'').trim()+' – '+W11_GRUPPEN[r]+' ('+(j-i)+')'));
+    for(let k=i;k<j;k++)out.push(els[k]);i=j}
+  return out}
+const teilCmp=(a,b)=>(a.art||'').toLowerCase().localeCompare((b.art||'').toLowerCase(),'de')||((w11Rang(a)===null?9:w11Rang(a))-(w11Rang(b)===null?9:w11Rang(b)))||(a.hersteller||'').toLowerCase().localeCompare((b.hersteller||'').toLowerCase(),'de')||natCmp(a.modell,b.modell)||(a.datum||'').localeCompare(b.datum||'')||(a.geaendert-b.geaendert);
 let invTimer=null;
 function invSpeichernSpaeter(){if(!curT)return;curT.geaendert=Date.now();clearTimeout(invTimer);
   ls('inv_letzte',{art:curT.art,herkunft:curT.herkunft});
@@ -812,7 +824,7 @@ async function zeigeInventar(neuAnzeigen){
       offen.length?h('div',{class:'banner'},h('b',{},offen.length+' Teil(e) noch nicht exportiert. '),'Exportiere sie, bevor du sie im Büro einliest – so ist auch alles gesichert.'):null,
       h('div',{class:'row',style:'flex-wrap:nowrap;margin-bottom:10px'},wahl,h('button',{class:'btn klein',onclick:listeNeuAnlegen},'＋ Liste')),
       liste.length?such:null,
-      sicht.length?sicht.map(t=>{const klasse=t.status==='Funktioniert'?'fertig':t.status==='Defekt'?'defekt':'';
+      sicht.length?gruppiert(sicht,sicht.map(t=>{const klasse=t.status==='Funktioniert'?'fertig':t.status==='Defekt'?'defekt':'';
         return h('button',{class:'karte-liste '+klasse,onclick:()=>oeffneTeil(t.uid)},
           h('div',{class:'row',style:'flex-wrap:nowrap'},
             t.fotos&&t.fotos[0]?h('img',{src:t.fotos[0].daten,alt:'',style:'width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none'}):null,
@@ -821,7 +833,7 @@ async function zeigeInventar(neuAnzeigen){
               h('span',{class:'badge'+(t.status==='Funktioniert'?' ok':t.status==='Defekt'?' warn':'')},t.status),' ',
               t.verwendung&&t.verwendung!=='Offen'?h('span',{class:'badge'},t.verwendung):null,' ',
               (g=>g?h('span',{class:'badge'+(g.s==='nein'?' warn':g.s==='ja'||g.s==='cpu'?' ok':'')},'Win 11 '+(g.s==='nein'?'✘':g.s==='?'?'?':g.s==='bedingt'?'⚠':'✔')):null)(w11Gesamt(t)),' ',
-              t.geaendert>(t.exportiert||0)?h('span',{class:'badge warn'},'nicht exportiert'):null)))})
+              t.geaendert>(t.exportiert||0)?h('span',{class:'badge warn'},'nicht exportiert'):null)))}))
       :h('div',{class:'leer'},liste.length?'Nichts gefunden.':'Noch keine Teile.',h('br'),liste.length?(aktiv?'In dieser Liste ist noch nichts.':''):'Tippe unten auf „Neues Teil“.'),
       liste.length?h('div',{class:'row',style:'margin-top:8px'},
         h('button',{class:'btn klein',onclick:()=>invExport(false)},'Neue/geänderte exportieren'),
