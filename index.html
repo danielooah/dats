@@ -230,6 +230,7 @@ function w11Board(roh){
   return null}
 
 function w11Gesamt(t){
+  if(t.w11===false||t.w11===0)return null;   /* Prüfung für dieses Teil nicht eingeschaltet */
   const art=String(t.art||'').toLowerCase();
   const istCpu=/prozessor|\bcpu\b/.test(art),istBoard=/mainboard|motherboard|mutterplatine/.test(art);
   if(!istCpu&&!istBoard)return null;
@@ -319,7 +320,7 @@ async function tx(mode,fn,speicher='einr'){const d=await dbOeffnen();return new 
 const alle=()=>tx('readonly',s=>s.getAll());
 const sichern=o=>tx('readwrite',s=>s.put(o));
 const loeschen=uid=>tx('readwrite',s=>s.delete(uid));
-const invAlle=()=>tx('readonly',s=>s.getAll(),'inventar');
+const invAlle=()=>tx('readonly',s=>s.getAll(),'inventar').then(l=>{(l||[]).forEach(t=>{if(t.w11===undefined)t.w11=!!(t.tpm||t.secureboot)});return l});
 const invSichern=o=>tx('readwrite',s=>s.put(o),'inventar');
 const invLoeschen=uid=>tx('readwrite',s=>s.delete(uid),'inventar');
 
@@ -769,7 +770,7 @@ function listeNeuAnlegen(){
 function neuesTeil(){const l=ls('inv_letzte')||{};
   const akt=invAktiv()||INV_STANDARD;const li=invListen([]).find(x=>x.name.toLowerCase()===akt.toLowerCase());
   return {uid:neueId(),liste:li?li.name:akt,art:l.art||'',hersteller:'',modell:'',eigenschaften:'',seriennr:'',herkunft:(li&&li.herkunft)||(akt.toLowerCase()===INV_STANDARD.toLowerCase()?(l.herkunft||''):''),
-    verwendung:INV_VERW[0],status:INV_STATUS[0],notiz:'',tpm:'',secureboot:'',datum:heute(),fotos:[],geaendert:Date.now(),exportiert:0}}
+    verwendung:INV_VERW[0],status:INV_STATUS[0],notiz:'',tpm:'',secureboot:'',w11:false,datum:heute(),fotos:[],geaendert:Date.now(),exportiert:0}}
 const INV_HERST=['Intel','AMD','NVIDIA','Seasonic','Corsair','be quiet!','Cooler Master','Fractal Design','Enermax','Super Flower','Chieftec','LC Power','Fortron','Delta','Thermaltake','Antec','Sharkoon','Xilence','SilverStone','EVGA','HP','Dell','Lenovo','Fujitsu','ASUS','Acer','MSI','Gigabyte','ASRock','Samsung','Kingston','Crucial','Western Digital','Seagate','Toshiba','Noctua','Zotac','Realtek','Qualcomm'];
 let invHerstGesehen=[];
 const herstellerAuswahl=()=>{const m=new Map();INV_HERST.concat(invHerstGesehen).forEach(n=>{n=herstellerNorm(String(n||'').trim());if(n&&!m.has(n.toLowerCase()))m.set(n.toLowerCase(),n)});
@@ -884,8 +885,13 @@ function zeigeTeil(neuAnzeigen){
     sel.value=t[key]||'';sel.addEventListener('change',()=>{t[key]=sel.value;w11Zeichnen();speichern()});
     return h('div',{class:'field'},h('label',{for:id},label),sel)};
   const w11Opt=h('div',{class:'grid2'},w11Wahl('TPM 2.0','tpm'),w11Wahl('Secure Boot / UEFI','secureboot'));
+  const w11Chk=h('input',{type:'checkbox',id:'w11chk'});w11Chk.checked=!!t.w11;
+  const w11Zeile=h('label',{class:'chk',for:'w11chk',style:'display:flex;gap:10px;align-items:center;margin:6px 0'},w11Chk,'Windows 11 prüfen');
+  w11Chk.addEventListener('change',()=>{t.w11=w11Chk.checked;w11Zeichnen();speichern()});
   const w11Zeichnen=()=>{const g=w11Gesamt(t),a=(t.art||'').toLowerCase();
-    w11Opt.style.display=/prozessor|\bcpu\b|mainboard|motherboard|mutterplatine/.test(a)?'':'none';
+    const passt=/prozessor|\bcpu\b|mainboard|motherboard|mutterplatine/.test(a);
+    w11Zeile.style.display=passt?'':'none';
+    w11Opt.style.display=passt&&t.w11?'':'none';
     ersetze(w11Box,g?h('div',{class:'w11 '+(g.s==='?'?'q':g.s)},h('b',{},W11_TEXT[g.s]),h('span',{class:'hinweis'},g.t+' · '+W11_STAND)):null)};
   const fotosZeichnen=()=>{ersetze(fotos,
     t.fotos.map((f,i)=>h('div',{class:'foto'},h('img',{src:f.daten,alt:''}),
@@ -908,7 +914,7 @@ function zeigeTeil(neuAnzeigen){
         feld('Um was handelt es sich?',t,'art',{list:'dl-invart',on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
         feld('Hersteller',t,'hersteller',{list:'dl-invherst',on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
         feld('Modell',t,'modell',{on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
-        w11Box,w11Opt,
+        w11Zeile,w11Box,w11Opt,
         feld('Eigenschaften (z. B. 450 W, 24-polig)',t,'eigenschaften',{area:true,rows:2,on:()=>w11Zeichnen()}),
         feld('Seriennummer',t,'seriennr',{scan:true}),
         feld('Herkunft (Rechner / Kunde)',t,'herkunft'),
@@ -934,7 +940,7 @@ async function invExport(alleTeile){
     const name='Inventar_'+stempel+(pakete.length>1?'_Teil'+(i+1):'')+'.json';
     const o={format:'dats-inventar',version:1,exportiert:d.toISOString(),listen:invListen(liste).map(x=>({name:x.name,herkunft:x.herkunft})),teile:pakete[i].map(t=>({uid:t.uid,liste:teilListe(t),datum:t.datum,geaendert:t.geaendert,
       art:t.art,hersteller:herstellerNorm(t.hersteller),modell:t.modell,eigenschaften:t.eigenschaften,seriennr:t.seriennr,herkunft:t.herkunft,
-      verwendung:t.verwendung,status:t.status,notiz:t.notiz,tpm:t.tpm||'',secureboot:t.secureboot||'',fotos:(t.fotos||[]).map(f=>({id:f.id,text:f.text||'',daten:f.daten}))}))};
+      verwendung:t.verwendung,status:t.status,notiz:t.notiz,tpm:t.tpm||'',secureboot:t.secureboot||'',w11:!!t.w11,fotos:(t.fotos||[]).map(f=>({id:f.id,text:f.text||'',daten:f.daten}))}))};
     const a=h('a',{href:URL.createObjectURL(new Blob([JSON.stringify(o)],{type:'application/json'})),download:name});
     document.body.append(a);a.click();
     setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
