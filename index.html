@@ -771,6 +771,9 @@ function neuesTeil(){const l=ls('inv_letzte')||{};
   return {uid:neueId(),liste:li?li.name:akt,art:l.art||'',hersteller:'',modell:'',eigenschaften:'',seriennr:'',herkunft:(li&&li.herkunft)||(akt.toLowerCase()===INV_STANDARD.toLowerCase()?(l.herkunft||''):''),
     verwendung:INV_VERW[0],status:INV_STATUS[0],notiz:'',tpm:'',secureboot:'',datum:heute(),fotos:[],geaendert:Date.now(),exportiert:0}}
 const INV_HERST=['Intel','AMD','NVIDIA','Seasonic','Corsair','be quiet!','Cooler Master','Fractal Design','Enermax','Super Flower','Chieftec','LC Power','Fortron','Delta','Thermaltake','Antec','Sharkoon','Xilence','SilverStone','EVGA','HP','Dell','Lenovo','Fujitsu','ASUS','Acer','MSI','Gigabyte','ASRock','Samsung','Kingston','Crucial','Western Digital','Seagate','Toshiba','Noctua','Zotac','Realtek','Qualcomm'];
+let invHerstGesehen=[];
+const herstellerAuswahl=()=>{const m=new Map();INV_HERST.concat(invHerstGesehen).forEach(n=>{n=herstellerNorm(String(n||'').trim());if(n&&!m.has(n.toLowerCase()))m.set(n.toLowerCase(),n)});
+  return [...m.values()].sort((a,b)=>a.localeCompare(b,'de'))};
 const herstellerNorm=n=>{const k=(n||'').trim().toLowerCase();if(k==='be quiet')return 'be quiet!';return INV_HERST.find(x=>x.toLowerCase()===k)||n};
 const natKey=s=>(s||'').toLowerCase().split(/(\d+)/).filter(x=>x!=='').map(x=>/^\d+$/.test(x)?[0,+x,'']:[1,0,x]);
 function natCmp(a,b){const x=natKey(a),y=natKey(b);for(let i=0;i<Math.min(x.length,y.length);i++){for(let j=0;j<3;j++){if(x[i][j]<y[i][j])return -1;if(x[i][j]>y[i][j])return 1}}return x.length-y.length}
@@ -800,6 +803,7 @@ async function zeigeInventar(neuAnzeigen){
   curT=null;ansicht='inv';
   if(neuAnzeigen){invUeb=true;invListeGepusht=false;try{history.pushState({v:'inv'},'','#inv')}catch(e){}}
   const liste=((await invAlle().catch(()=>[]))||[]).sort((a,b)=>teilListe(a).toLowerCase().localeCompare(teilListe(b).toLowerCase(),'de')||teilCmp(a,b));
+  invHerstGesehen=liste.map(t=>t.hersteller);
   const offen=liste.filter(t=>t.geaendert>(t.exportiert||0));
   const alleListen=invListen(liste);let aktiv=invAktiv();
   if(aktiv&&!alleListen.some(x=>x.name.toLowerCase()===aktiv.toLowerCase())){aktiv='';ls('inv_aktiv','')}
@@ -902,7 +906,7 @@ function zeigeTeil(neuAnzeigen){
       h('div',{class:'card'},
         listeWahl(t),
         feld('Um was handelt es sich?',t,'art',{list:'dl-invart',on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
-        feld('Hersteller',t,'hersteller',{on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
+        feld('Hersteller',t,'hersteller',{list:'dl-invherst',on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
         feld('Modell',t,'modell',{on:()=>{$('#titel').textContent=teilTitel(t);w11Zeichnen()}}),
         w11Box,w11Opt,
         feld('Eigenschaften (z. B. 450 W, 24-polig)',t,'eigenschaften',{area:true,rows:2,on:()=>w11Zeichnen()}),
@@ -912,7 +916,8 @@ function zeigeTeil(neuAnzeigen){
         feld('Notiz',t,'notiz',{area:true,rows:2}))),
     h('div',{class:'fuss'},h('button',{class:'btn',onclick:teilZurueck},'Fertig'),
       h('button',{class:'btn primary',onclick:async()=>{if(teilLeer(curT)){toast('Erst Foto oder Angaben eintragen');return}await invSofort();const alt=curT;curT=neuesTeil();curT.herkunft=alt.herkunft;curT.art=alt.art;curT.hersteller=herstellerNorm(alt.hersteller||'');curT._hk=curT.hersteller;curT.liste=alt.liste||curT.liste;await invSichern(curT);zeigeTeil(false);toast('Nächstes Teil');const mf=[...document.querySelectorAll('.field')].find(f=>f.querySelector('label')&&f.querySelector('label').textContent==='Modell');if(mf&&mf.querySelector('input'))mf.querySelector('input').focus()}},'＋ Nächstes Teil')),
-    h('div',{},h('datalist',{id:'dl-invart'},INV_ARTEN.map(o=>h('option',{value:o})))));
+    h('div',{},h('datalist',{id:'dl-invart'},INV_ARTEN.map(o=>h('option',{value:o}))),
+      h('datalist',{id:'dl-invherst'},herstellerAuswahl().map(o=>h('option',{value:o})))));
   fotosZeichnen();w11Zeichnen()}
 const INV_GRENZE=14*1024*1024;
 async function invExport(alleTeile){
