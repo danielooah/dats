@@ -61,6 +61,9 @@ details>.inhalt{padding:0 14px 6px}
 .chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
 .chip{flex:none;border:1px solid var(--rand);background:var(--card);border-radius:999px;padding:9px 16px;font-weight:600;cursor:pointer;max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip.aktiv{background:var(--akzent);color:var(--akzent-text);border-color:var(--akzent)}
+.vchip{border:1px solid var(--rand);background:var(--card);border-radius:999px;padding:9px 16px;font-weight:600;cursor:pointer;color:var(--text);font-size:inherit}
+.vchip.aktiv{background:var(--akzent);color:var(--akzent-text);border-color:var(--akzent)}
+.vchips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px}
 .hinweis{font-size:13px;color:var(--leicht)}
 .gruppe{font-weight:700;font-size:13px;margin:14px 2px 6px;color:var(--leicht)}
 .badge{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;background:var(--neutral)}
@@ -249,7 +252,25 @@ const W11_TEXT={ja:'✔ Windows-11-fähig',cpu:'✔ Bisher in Ordnung',bedingt:'
 if(typeof module!=='undefined')module.exports={w11Cpu,w11Board,w11Gesamt};
 'use strict';
 /* ---------- Konstanten ---------- */
-const TYPEN=['Windows-Rechner','Laptop','Server','Mac','Tablet','Smartphone','Drucker','Router','Firewall','Telefonanlage','NUC','Netzwerkgerät','Sonstiges'];
+const TYPEN=['Windows-Rechner','Laptop','Server','Mac','Tablet','Smartphone','Drucker','Router','Firewall','Telefonanlage','NUC','Netzwerkgerät','Switch','Access Point','NAS','USV','Serverschrank / Rack','Sonstiges'];
+const KOMP_TYPEN=['Patchpanel','Switch','Router','Firewall','Server','NAS','USV','PDU / Steckdosenleiste','Access Point','WLAN-Controller','Telefonanlage','VoIP-Gateway','Medienkonverter / Modem','Backup-Gerät','KVM / Konsole','Kamera-Rekorder (NVR)','Blindblende / Ablage','Lüftereinheit','Sonstiges'];
+const KOMP_HERST=['Ubiquiti','Cisco','HPE / Aruba','Dell','Lenovo','Fortinet','Sophos','Palo Alto','WatchGuard','LANCOM','AVM','MikroTik','Netgear','TP-Link','Zyxel','D-Link','Juniper','Synology','QNAP','APC','Eaton','Rittal','Starface','Gigaset','Yealink','Snom','Fanvil','Grandstream','Mitel','3CX','Draytek','pfSense / OPNsense','Supermicro','Fujitsu','Thomas-Krenn','HP','Digitus','Sonstiges'];
+const KOMP_STATUS=['geplant','verbaut','verkabelt','konfiguriert','getestet','Fehler / Mangel'];
+const KABEL_ARTEN=['Cat6','Cat6a','Cat7','LWL OM3','LWL OM4','LWL OS2','DAC / Twinax','Strom','Sonstiges'];
+const TEL_GERAETE=['Tischtelefon','DECT-Handset','Softphone / App','Konferenztelefon','Türsprechstelle','Fax-Gateway','Faxgerät','Reserve'];
+const VORORT_STANDARD={
+'Serverschrank / Rack':['Schrank aufgebaut und ausgerichtet','Schrank geerdet','Schienen / Fachböden montiert','Patchpanel verbaut','Switch verbaut','Server verbaut','USV verbaut','Steckdosenleiste (PDU) verbaut','Alles verkabelt und beschriftet','Kabelmanagement hergestellt','Lüftung / Kühlung geprüft','Schrank verschlossen, Schlüssel übergeben'],
+'Netzwerk':['Strukturierte Verkabelung geprüft','Netzwerkdosen aufgelegt','Switch konfiguriert','VLANs eingerichtet','WLAN / Access Points eingerichtet','Router / Firewall getauscht','Internetzugang getestet','IP-Plan dokumentiert','Konfiguration gesichert'],
+'Server':['Server installiert','Betriebssystem installiert und aktualisiert','Domäne eingerichtet','Benutzer / Gruppen angelegt','Freigaben und Rechte eingerichtet','Virtualisierung eingerichtet','Server-Monitoring eingerichtet','Altserver abgelöst'],
+'Backup & Sicherheit':['Backup eingerichtet','Backup-Test / Restore-Test durchgeführt','Virenschutz installiert','Fernwartung eingerichtet','USV getestet','Passwörter übergeben / dokumentiert'],
+'Telefonie':['Telefonanlage installiert','Anlage konfiguriert','Provider / SIP-Trunk eingerichtet','Rufnummern geschaltet','Rufnummern portiert','Telefone eingerichtet / registriert','Telefone neu registriert','Warteschlangen / Ansagen eingerichtet','Testanrufe intern / extern durchgeführt','Fax / Türsprechstelle getestet'],
+'Arbeitsplatz':['Rechner aufgebaut','Windows installiert','Programme installiert','Benutzer eingerichtet','Daten übernommen','Drucker eingerichtet','Altgerät abgebaut'],
+'Drucker & Peripherie':['Drucker aufgestellt','Treiber installiert','Scan-to-Mail / Scan-to-Folder eingerichtet','Monitore / Dockingstation angeschlossen'],
+'Cloud & Microsoft 365':['Microsoft-365-Konten angelegt','E-Mail eingerichtet','Postfächer migriert','Teams / SharePoint eingerichtet','Zwei-Faktor-Anmeldung aktiviert'],
+'Abschluss':['Funktionstest durchgeführt','Einweisung des Kunden','Dokumentation übergeben','Übergabe / Abnahme unterschrieben','Altgeräte entsorgt / mitgenommen','Arbeitsplatz aufgeräumt']};
+const KOMP_SPALTEN=[['k_he','HE'],['k_typ','Typ'],['k_hersteller','Hersteller'],['k_modell','Modell'],['k_sn','Seriennummer'],['k_ip','IP / Name'],['k_status','Status'],['k_bemerkung','Bemerkung']];
+const KABEL_SPALTEN=[['v_von','Von (Gerät / Port)'],['v_nach','Nach (Gerät / Port)'],['v_kabel','Kabel'],['v_laenge','Länge'],['v_ziel','Ziel / Raum / Dose'],['v_bemerkung','Bemerkung']];
+const TEL_SPALTEN=[['t_name','Benutzer / Platz'],['t_durchwahl','Durchwahl'],['t_geraet','Endgerät'],['t_modell','Modell'],['t_mac','MAC-Adresse'],['t_ip','IP'],['t_bemerkung','Bemerkung']];
 const ARTEN=['Neuinstallation','Reparatur'];
 const KONFIG=['Nicht begonnen','In Arbeit','Abgeschlossen'];
 const FERN=['NinjaOne','TeamViewer','AnyDesk','Windows-Remotedesktop','Sonstiges'];
@@ -266,7 +287,7 @@ const CHECKLISTEN={
  'Firewall installieren':['Alte Konfiguration gesichert','Firewall aufgestellt und angeschlossen','Firmware aktuell','Standard-Passwort geändert','Schnittstellen / VLANs konfiguriert','Regeln eingerichtet','VPN eingerichtet','Lizenz / Updates aktiviert','Funktionstest durchgeführt','Konfiguration gesichert','Logging / Monitoring geprüft'],
  'Altgerät austauschen':['Daten gesichert / übertragen','Programme und Konten dokumentiert','Domäne verlassen / Konto bereinigt','Datenträger sicher gelöscht','Altgerät vom Netz genommen','Altgerät zur Entsorgung übergeben','Lizenzen freigegeben']};
 const ALT_FELDER=['alt_bezeichnung','alt_sn','alt_datentraeger','alt_loeschmethode','alt_loeschdatum','alt_entsorgung','alt_uebergeben_an','alt_notiz'];
-const FELDER=['bezeichnung','client_name','fuer_wen','typ','art','eingerichtet_von','modell','entsperrcode','datum','von','bis','grundkonfig','grundkonfig_notiz','hostname','ip','wlan','fern_tool','fern_id','notizen','router_admin','router_admin_pw','wlan_name','wlan_pw','ip_bereich','dhcp','portfreigaben',...ALT_FELDER,'dom_ou','dom_benutzer','netzlaufwerke','dns','vlan','firmware','checkliste_name','domaene'];
+const FELDER=['bezeichnung','client_name','fuer_wen','typ','art','eingerichtet_von','modell','entsperrcode','datum','von','bis','grundkonfig','grundkonfig_notiz','hostname','ip','wlan','fern_tool','fern_id','notizen','router_admin','router_admin_pw','wlan_name','wlan_pw','ip_bereich','dhcp','portfreigaben',...ALT_FELDER,'dom_ou','dom_benutzer','netzlaufwerke','dns','vlan','firmware','checkliste_name','domaene','rack_standort','rack_groesse','rack_notiz','tel_anlage','tel_provider','tel_rufnummern'];
 const HAKEN=['ninjaone','eset','dom_beigetreten','config_gesichert'];
 
 /* ---------- Hilfen ---------- */
@@ -331,6 +352,7 @@ function neuesGeraet(datum){return {uid:neueId(),bezeichnung:'',client_name:'',f
   notizen:'',router_admin:'',router_admin_pw:'',wlan_name:'',wlan_pw:'',ip_bereich:'',dhcp:'',portfreigaben:'',
   alt_bezeichnung:'',alt_sn:'',alt_datentraeger:'',alt_loeschmethode:'',alt_loeschdatum:'',alt_entsorgung:'',alt_uebergeben_an:'',alt_notiz:'',
   dom_beigetreten:false,dom_ou:'',dom_benutzer:'',domaene:'',netzlaufwerke:'',dns:'',vlan:'',firmware:'',config_gesichert:false,checkliste_name:'',checkliste:[],
+  rack_standort:'',rack_groesse:'',rack_notiz:'',tel_anlage:'',tel_provider:'',tel_rufnummern:'',vorort:[],komponenten:[],verkabelung:[],telefonie:[],
   software:[],konten:[],fotos:[]}}
 function neueEinrichtung(firma){const d=heute();return {uid:neueId(),kunde:'',firma:firma||'',datum:d,gast_wlan:false,gast_ssid:'',gast_pw:'',unterschrift:'',unterschrift_name:'',unterschrift_datum:'',geraete:[neuesGeraet(d)],geaendert:Date.now(),exportiert:0}}
 function vorlagen(){const v=ls('vorlagen');return v&&typeof v==='object'?v:JSON.parse(JSON.stringify(STANDARD_VORLAGEN))}
@@ -367,7 +389,7 @@ function bereich(titel,kinder,offen){const d=h('details',{},h('summary',{},titel
   d.open=titel in offenMerk?offenMerk[titel]:!!offen;
   d.addEventListener('toggle',()=>{offenMerk[titel]=d.open});return d}
 function listen(){const lst=(id,arr)=>h('datalist',{id},arr.map(o=>h('option',{value:o})));
-  return h('div',{},lst('dl-fern',FERN),lst('dl-ktyp',KONTO_TYPEN),lst('dl-dt',ALT_DATENTRAEGER),lst('dl-lm',ALT_LOESCH),lst('dl-es',ALT_ENTSORGUNG),lst('dl-firmen',firmenListe().map(f=>f.name)))}
+  return h('div',{},lst('dl-fern',FERN),lst('dl-ktyp',KONTO_TYPEN),lst('dl-dt',ALT_DATENTRAEGER),lst('dl-lm',ALT_LOESCH),lst('dl-es',ALT_ENTSORGUNG),lst('dl-ktyp2',KOMP_TYPEN),lst('dl-kherst',KOMP_HERST),lst('dl-kstat',KOMP_STATUS),lst('dl-kabel',KABEL_ARTEN),lst('dl-telg',TEL_GERAETE),lst('dl-firmen',firmenListe().map(f=>f.name)))}
 
 /* ---------- Ansicht: Liste ---------- */
 async function zeigeListe(){
@@ -464,6 +486,7 @@ function einrLoeschen(){
 /* ---------- Ansicht: Gerät ---------- */
 function geraetZeichnen(){
   const g=cur.geraete[curG];if(!g)return;
+  for(const k of ['vorort','komponenten','verkabelung','telefonie'])g[k]=g[k]||[];
   const box=$('#dev');
   const dauerAnzeige=h('div',{class:'hinweis',id:'dauer',style:'font-weight:700;margin-bottom:8px'});
   const dauerAkt=()=>{const m=gDauer(g);dauerAnzeige.textContent=m!=null?'Dauer: '+dauerText(m)+(parseDauer(g.dauer)!=null?' (von Hand)':''):''};
@@ -538,6 +561,53 @@ function geraetZeichnen(){
         return h('div',{},f,h('button',{class:'btn klein',onclick:()=>{if(!t.text.trim())return;g.checkliste.push({text:t.text.trim(),ok:false});speichern();clZeichnen()}},'＋ Punkt'))})())};
   clZeichnen();
 
+  /* Vor Ort durchgeführt */
+  const vokat=()=>{const k=ls('vorort_katalog');return k&&typeof k==='object'&&Object.keys(k).length?k:VORORT_STANDARD};
+  const vo=h('div',{id:'vorort'});let voGruppe=null;
+  const voZeichnen=()=>{const kat=vokat(),bekannt=new Set(Object.values(kat).flat());
+    const eigene=g.vorort.map(p=>p.text).filter(t=>!bekannt.has(t));
+    const namen=Object.keys(kat).concat(eigene.length?['Eigene Punkte']:[]);
+    if(!namen.includes(voGruppe))voGruppe=namen[0];
+    const gew=new Set(g.vorort.map(p=>p.text));
+    const punkte=voGruppe==='Eigene Punkte'?eigene:(kat[voGruppe]||[]);
+    const umsch=t=>{const i=g.vorort.findIndex(p=>p.text===t);if(i>=0)g.vorort.splice(i,1);else g.vorort.push({text:t});speichern();voZeichnen()};
+    const neuT={text:''};
+    ersetze(vo,
+      h('div',{class:'vchips'},namen.map(n=>{const pts=n==='Eigene Punkte'?eigene:kat[n],a=pts.filter(t=>gew.has(t)).length;
+        return h('button',{type:'button',class:'vchip'+(n===voGruppe?' aktiv':''),onclick:()=>{voGruppe=n;voZeichnen()}},n+(a?' ('+a+')':''))})),
+      h('div',{class:'hinweis',style:'font-weight:700;margin:8px 0'},g.vorort.length?g.vorort.length+' Punkt'+(g.vorort.length===1?'':'e')+' ausgewählt':'Noch nichts ausgewählt'),
+      punkte.map(t=>h('label',{class:'check'},(()=>{const c=h('input',{type:'checkbox'});c.checked=gew.has(t);c.addEventListener('change',()=>umsch(t));return c})(),t)),
+      h('div',{style:'margin-top:10px'},feld('Eigener Punkt',neuT,'text'),
+        h('div',{class:'row'},
+          h('button',{type:'button',class:'btn klein',onclick:()=>{const t=(neuT.text||'').trim();if(!t)return;if(!gew.has(t))g.vorort.push({text:t});
+            voGruppe=Object.values(kat).flat().includes(t)?voGruppe:'Eigene Punkte';speichern();voZeichnen()}},'＋ Punkt hinzufügen'),
+          h('button',{type:'button',class:'btn klein',onclick:katalogBearbeiten},'Katalog bearbeiten …'))))};
+  const katalogBearbeiten=()=>{const kat=vokat();
+    const ta=h('textarea',{rows:14});ta.value=Object.entries(kat).map(([n,p])=>'['+n+']\n'+p.join('\n')).join('\n\n');
+    ersetze(vo,h('div',{class:'hinweis',style:'margin-bottom:6px'},'[Gruppe] als Überschrift, darunter ein Arbeitsschritt pro Zeile.'),ta,
+      h('div',{class:'row',style:'margin-top:8px'},
+        h('button',{type:'button',class:'btn klein primary',onclick:()=>{const k={};let gr=null;
+          for(const z of ta.value.split('\n').map(x=>x.trim()).filter(Boolean)){
+            if(z.startsWith('[')&&z.endsWith(']')&&z.length>2){gr=z.slice(1,-1).trim();k[gr]=k[gr]||[]}else if(gr)k[gr].push(z)}
+          for(const n of Object.keys(k))if(!k[n].length)delete k[n];
+          if(!Object.keys(k).length){toast('Der Katalog darf nicht leer sein');return}
+          ls('vorort_katalog',k);voGruppe=null;voZeichnen()}},'Speichern'),
+        h('button',{type:'button',class:'btn klein',onclick:()=>{if(confirm('Standardliste wiederherstellen?')){ls('vorort_katalog',JSON.parse(JSON.stringify(VORORT_STANDARD)));voGruppe=null;voZeichnen()}}},'Standard'),
+        h('button',{type:'button',class:'btn klein',onclick:voZeichnen},'Abbrechen')))};
+  voZeichnen();
+
+  /* Tabellen: Komponenten, Verkabelung, Telefone */
+  const tabelle=(arr,spalten,name,leer,listen)=>{const box=h('div',{});
+    const z=()=>{ersetze(box,
+      arr.map((x,i)=>h('div',{class:'eintrag'},
+        spalten.map(([k,l])=>feld(l,x,k,listen&&listen[k]?{list:listen[k]}:(k==='k_he'?{mode:'numeric'}:{}))),
+        h('button',{type:'button',class:'btn klein danger',onclick:()=>{arr.splice(i,1);speichern();z()}},name+' entfernen'))),
+      h('button',{type:'button',class:'btn klein',onclick:()=>{arr.push(Object.assign({},leer));speichern();z()}},'＋ '+name))};
+    z();return box};
+  const komp=tabelle(g.komponenten,KOMP_SPALTEN,'Komponente',{k_status:'verbaut'},{k_typ:'dl-ktyp2',k_hersteller:'dl-kherst',k_status:'dl-kstat'});
+  const kabel=tabelle(g.verkabelung,KABEL_SPALTEN,'Verbindung',{v_kabel:'Cat6'},{v_kabel:'dl-kabel'});
+  const tel=tabelle(g.telefonie,TEL_SPALTEN,'Telefon',{t_geraet:'Tischtelefon'},{t_geraet:'dl-telg'});
+
   box.replaceChildren(
     bereich('Gerät',[typ,
       feld('Bezeichnung',g,'bezeichnung',{on:titelAkt}),ohneClient?null:feld('Client-Name',g,'client_name'),feld('Für wen',g,'fuer_wen'),
@@ -555,6 +625,13 @@ function geraetZeichnen(){
     bereich('Konfiguration',[
       auswahl('Stand',g,'grundkonfig',KONFIG),haken('NinjaOne installiert',g,'ninjaone'),haken('ESET installiert',g,'eset'),
       feld('Was wurde konfiguriert?',g,'grundkonfig_notiz',{area:true})],false),
+    bereich('Vor Ort durchgeführt',[vo],g.vorort.length>0||g.typ==='Serverschrank / Rack'),
+    bereich('Serverschrank / Rack',[feld('Standort / Raum',g,'rack_standort'),feld('Größe (z. B. 19″, 12 HE)',g,'rack_groesse'),
+      feld('Bemerkung',g,'rack_notiz'),h('div',{class:'gruppe'},'Komponenten (von oben nach unten)'),komp,
+      h('div',{class:'gruppe'},'Verkabelung'),kabel],g.komponenten.length>0||g.typ==='Serverschrank / Rack'),
+    bereich('Telefonie',[feld('Telefonanlage (z. B. Starface, 3CX)',g,'tel_anlage'),feld('Provider (z. B. Easybell)',g,'tel_provider'),
+      feld('Rufnummern (eine Zeile pro Nummer)',g,'tel_rufnummern',{area:true,rows:3}),h('div',{class:'gruppe'},'Telefone und Benutzer'),tel],
+      !!(g.tel_anlage||g.telefonie.length)),
     bereich('Checkliste',[cl],(g.checkliste||[]).length>0),
     bereich('Programme',[software],false),
     bereich('Konten',[konten],false),
@@ -607,6 +684,9 @@ function exportObjekt(e){return {format:'dats-mobil',version:1,exportiert:new Da
     const m=parseDauer(g.dauer);o.dauer=m!=null?String(m):'';
     for(const k of HAKEN)o[k]=!!g[k];o.checkliste=(g.checkliste||[]).filter(p=>(p.text||'').trim()).map(p=>({text:p.text,ok:!!p.ok}));
     o.software=g.software.filter(s=>(s.programm||'').trim());o.konten=g.konten;
+    o.vorort=(g.vorort||[]).filter(p=>(p.text||'').trim());
+    const nl=(a,sp)=>(a||[]).filter(x=>sp.some(([k])=>(x[k]||'').trim())).map(x=>{const r={};for(const [k] of sp)r[k]=x[k]||'';return r});
+    o.komponenten=nl(g.komponenten,KOMP_SPALTEN);o.verkabelung=nl(g.verkabelung,KABEL_SPALTEN);o.telefonie=nl(g.telefonie,TEL_SPALTEN);
     o.fotos=g.fotos.map(f=>({id:f.id,text:f.text||'',daten:f.daten}));return o})}}}
 function dateiName(e){const s=t=>String(t||'').normalize('NFKD').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_').slice(0,40)||'x';
   return 'Einrichtung_'+s(e.firma)+'_'+(e.datum||heute())+'.json'}
