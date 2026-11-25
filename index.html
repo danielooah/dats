@@ -277,7 +277,7 @@ const FERN=['NinjaOne','TeamViewer','AnyDesk','Windows-Remotedesktop','Sonstiges
 const KONTO_ARTEN=['E-Mail','Programm/App','Benutzer','Sonstiges'];
 const KONTO_TYPEN=['Lokal','Administrator','Domäne','Microsoft 365','Microsoft-Konto','Exchange','IMAP','POP3','Apple-ID','Google-Konto','Sonstiges'];
 const STANDARD_VORLAGEN={'Standard-Arbeitsplatz':['Microsoft 365 Apps','Google Chrome','Mozilla Firefox','Adobe Acrobat Reader','7-Zip','NinjaOne Agent','ESET Endpoint Security'],'Server':['NinjaOne Agent','ESET Server Security','7-Zip']};
-const UEBERNEHMEN=['typ','art','eingerichtet_von','grundkonfig','grundkonfig_notiz','ninjaone','eset','software','fern_tool','wlan'];
+const UEBERNEHMEN=['typ','art','eingerichtet_von','grundkonfig','grundkonfig_notiz','ninjaone','eset','windows_version','updates','software','fern_tool','wlan'];
 const ALT_DATENTRAEGER=['nicht ausgebaut / nicht relevant','ausgebaut und beim Kunden belassen','sicher gelöscht','physisch vernichtet'];
 const ALT_LOESCH=['Secure Erase (Hersteller-Tool)','DBAN / Überschreiben','Windows-Zurücksetzen (nur Datenträger neu aufgesetzt)','Löschen per Diskpart clean all','Mechanisch zerstört'];
 const ALT_ENTSORGUNG=['Mitgenommen zur Entsorgung','Entsorger / Wertstoffhof','Beim Kunden belassen','Weiterverwendet / verkauft'];
@@ -287,8 +287,8 @@ const CHECKLISTEN={
  'Firewall installieren':['Alte Konfiguration gesichert','Firewall aufgestellt und angeschlossen','Firmware aktuell','Standard-Passwort geändert','Schnittstellen / VLANs konfiguriert','Regeln eingerichtet','VPN eingerichtet','Lizenz / Updates aktiviert','Funktionstest durchgeführt','Konfiguration gesichert','Logging / Monitoring geprüft'],
  'Altgerät austauschen':['Daten gesichert / übertragen','Programme und Konten dokumentiert','Domäne verlassen / Konto bereinigt','Datenträger sicher gelöscht','Altgerät vom Netz genommen','Altgerät zur Entsorgung übergeben','Lizenzen freigegeben']};
 const ALT_FELDER=['alt_bezeichnung','alt_sn','alt_datentraeger','alt_loeschmethode','alt_loeschdatum','alt_entsorgung','alt_uebergeben_an','alt_notiz'];
-const FELDER=['bezeichnung','client_name','fuer_wen','typ','art','eingerichtet_von','modell','entsperrcode','datum','von','bis','grundkonfig','grundkonfig_notiz','hostname','ip','wlan','fern_tool','fern_id','notizen','router_admin','router_admin_pw','wlan_name','wlan_pw','ip_bereich','dhcp','portfreigaben',...ALT_FELDER,'dom_ou','dom_benutzer','netzlaufwerke','dns','vlan','firmware','checkliste_name','domaene','rack_standort','rack_groesse','rack_notiz','tel_anlage','tel_provider','tel_rufnummern'];
-const HAKEN=['ninjaone','eset','dom_beigetreten','config_gesichert'];
+const FELDER=['bezeichnung','client_name','fuer_wen','typ','art','eingerichtet_von','modell','entsperrcode','datum','von','bis','grundkonfig','grundkonfig_notiz','hostname','ip','wlan','fern_tool','fern_id','notizen','router_admin','router_admin_pw','wlan_name','wlan_pw','ip_bereich','dhcp','portfreigaben',...ALT_FELDER,'dom_ou','dom_benutzer','netzlaufwerke','dns','vlan','firmware','checkliste_name','domaene','rack_standort','rack_groesse','rack_notiz','tel_anlage','tel_provider','tel_rufnummern','windows_version'];
+const HAKEN=['ninjaone','eset','dom_beigetreten','config_gesichert','updates'];
 
 /* ---------- Hilfen ---------- */
 const $=s=>document.querySelector(s);
@@ -348,7 +348,7 @@ const invLoeschen=uid=>tx('readwrite',s=>s.delete(uid),'inventar');
 /* ---------- Modell ---------- */
 function neuesGeraet(datum){return {uid:neueId(),bezeichnung:'',client_name:'',fuer_wen:'',typ:TYPEN[0],art:ARTEN[0],
   eingerichtet_von:ls('eingerichtet_von')||'',modell:'',entsperrcode:'',datum:datum,von:'',bis:'',dauer:'',
-  grundkonfig:KONFIG[0],grundkonfig_notiz:'',ninjaone:false,eset:false,hostname:'',ip:'',wlan:'',fern_tool:'',fern_id:'',
+  grundkonfig:KONFIG[0],grundkonfig_notiz:'',ninjaone:false,eset:false,windows_version:'',updates:false,hostname:'',ip:'',wlan:'',fern_tool:'',fern_id:'',
   notizen:'',router_admin:'',router_admin_pw:'',wlan_name:'',wlan_pw:'',ip_bereich:'',dhcp:'',portfreigaben:'',
   alt_bezeichnung:'',alt_sn:'',alt_datentraeger:'',alt_loeschmethode:'',alt_loeschdatum:'',alt_entsorgung:'',alt_uebergeben_an:'',alt_notiz:'',
   dom_beigetreten:false,dom_ou:'',dom_benutzer:'',domaene:'',netzlaufwerke:'',dns:'',vlan:'',firmware:'',config_gesichert:false,checkliste_name:'',checkliste:[],
@@ -494,6 +494,7 @@ function geraetZeichnen(){
   const typ=auswahl('Gerätetyp',g,'typ',TYPEN,()=>{titelAkt();geraetZeichnen()});
   const istNetz=['Router','Firewall','Netzwerkgerät'].includes(g.typ);
   const ohneClient=['Router','Firewall','Telefonanlage','Netzwerkgerät','Drucker'].includes(g.typ);
+  const istWindows=['Windows-Rechner','Laptop','Server','NUC'].includes(g.typ);
 
   const software=h('div',{id:'software'}),konten=h('div',{id:'konten'});
   const softwareZeichnen=()=>{ersetze(software,
@@ -625,6 +626,8 @@ function geraetZeichnen(){
     bereich('Konfiguration',[
       auswahl('Stand',g,'grundkonfig',KONFIG),haken('NinjaOne installiert',g,'ninjaone'),haken('ESET installiert',g,'eset'),
       feld('Was wurde konfiguriert?',g,'grundkonfig_notiz',{area:true})],false),
+    ...(istWindows||g.windows_version||g.updates?[bereich('Updates und Sicherheit',[
+      feld('Windows-Version',g,'windows_version'),haken('Windows-Updates durchgeführt',g,'updates')],!!(g.windows_version||g.updates))]:[]),
     bereich('Vor Ort durchgeführt',[vo],g.vorort.length>0||g.typ==='Serverschrank / Rack'),
     bereich('Serverschrank / Rack',[feld('Standort / Raum',g,'rack_standort'),feld('Größe (z. B. 19″, 12 HE)',g,'rack_groesse'),
       feld('Bemerkung',g,'rack_notiz'),h('div',{class:'gruppe'},'Komponenten (von oben nach unten)'),komp,
