@@ -279,7 +279,7 @@ const FERN=['NinjaOne','TeamViewer','AnyDesk','Windows-Remotedesktop','Sonstiges
 const KONTO_ARTEN=['E-Mail','Programm/App','Benutzer','Sonstiges'];
 const KONTO_TYPEN=['Lokal','Administrator','Domäne','Microsoft 365','Microsoft-Konto','Exchange','IMAP','POP3','Apple-ID','Google-Konto','Sonstiges'];
 const STANDARD_VORLAGEN={'Standard-Arbeitsplatz':['Microsoft 365 Apps','Google Chrome','Mozilla Firefox','Adobe Acrobat Reader','7-Zip','NinjaOne Agent','ESET Endpoint Security'],'Server':['NinjaOne Agent','ESET Server Security','7-Zip']};
-const UEBERNEHMEN=['typ','art','eingerichtet_von','grundkonfig','grundkonfig_notiz','ninjaone','eset','windows_version','updates','software','fern_tool','wlan'];
+const UEBERNEHMEN=['typ','art','eingerichtet_von','grundkonfig','grundkonfig_notiz','ninjaone','eset','windows_version','updates','software','fern_tool','wlan','ninja_remote','energiemodus','hoechstleistung'];
 const ALT_DATENTRAEGER=['nicht ausgebaut / nicht relevant','ausgebaut und beim Kunden belassen','sicher gelöscht','physisch vernichtet'];
 const ALT_LOESCH=['Secure Erase (Hersteller-Tool)','DBAN / Überschreiben','Windows-Zurücksetzen (nur Datenträger neu aufgesetzt)','Löschen per Diskpart clean all','Mechanisch zerstört'];
 const ALT_ENTSORGUNG=['Mitgenommen zur Entsorgung','Entsorger / Wertstoffhof','Beim Kunden belassen','Weiterverwendet / verkauft'];
@@ -291,6 +291,13 @@ const CHECKLISTEN={
 const ALT_FELDER=['alt_bezeichnung','alt_sn','alt_datentraeger','alt_loeschmethode','alt_loeschdatum','alt_entsorgung','alt_uebergeben_an','alt_notiz'];
 const FELDER=['bezeichnung','client_name','fuer_wen','typ','art','eingerichtet_von','modell','entsperrcode','datum','von','bis','grundkonfig','grundkonfig_notiz','hostname','ip','wlan','fern_tool','fern_id','notizen','router_admin','router_admin_pw','wlan_name','wlan_pw','ip_bereich','dhcp','portfreigaben',...ALT_FELDER,'dom_ou','dom_benutzer','netzlaufwerke','dns','vlan','firmware','checkliste_name','domaene','rack_standort','rack_groesse','rack_notiz','tel_anlage','tel_provider','tel_rufnummern','windows_version'];
 const HAKEN=['ninjaone','eset','dom_beigetreten','config_gesichert','updates'];
+/* Seit dats-mobil-17 (Format bleibt Version 1, alle optional, wie Desktop austausch.py): Einrichtung kundennr, auftragsdatum,
+   lieferdatum (JJJJ-MM-TT, "" = leer); Gerät artikelnr, ninja_remote, energiemodus, hoechstleistung, netzlaufwerke_liste.
+   Fehlt ein Schlüssel (ältere Einträge auf dem Handy), wird er nicht exportiert – am PC bleibt dann der Wert stehen. */
+const KOPF_NEU=['kundennr','auftragsdatum','lieferdatum'];
+const FELDER_NEU=['artikelnr'];
+const HAKEN_NEU=['ninja_remote','energiemodus','hoechstleistung'];
+const NL_SPALTEN=[['buchstabe','Buchstabe (z. B. S:)'],['name','Name'],['unc','UNC-Pfad']];
 
 /* ---------- Hilfen ---------- */
 const $=s=>document.querySelector(s);
@@ -355,8 +362,8 @@ function neuesGeraet(datum){return {uid:neueId(),bezeichnung:'',client_name:'',f
   alt_bezeichnung:'',alt_sn:'',alt_datentraeger:'',alt_loeschmethode:'',alt_loeschdatum:'',alt_entsorgung:'',alt_uebergeben_an:'',alt_notiz:'',
   dom_beigetreten:false,dom_ou:'',dom_benutzer:'',domaene:'',netzlaufwerke:'',dns:'',vlan:'',firmware:'',config_gesichert:false,checkliste_name:'',checkliste:[],
   rack_standort:'',rack_groesse:'',rack_notiz:'',tel_anlage:'',tel_provider:'',tel_rufnummern:'',vorort:[],komponenten:[],verkabelung:[],telefonie:[],
-  software:[],konten:[],fotos:[]}}
-function neueEinrichtung(firma){const d=heute();return {uid:neueId(),kunde:'',firma:firma||'',datum:d,gast_wlan:false,gast_ssid:'',gast_pw:'',unterschrift:'',unterschrift_name:'',unterschrift_datum:'',geraete:[neuesGeraet(d)],geaendert:Date.now(),exportiert:0}}
+  software:[],konten:[],fotos:[],artikelnr:'',ninja_remote:false,energiemodus:false,hoechstleistung:false,netzlaufwerke_liste:[]}}
+function neueEinrichtung(firma){const d=heute();return {uid:neueId(),kunde:'',firma:firma||'',datum:d,kundennr:'',auftragsdatum:'',lieferdatum:'',gast_wlan:false,gast_ssid:'',gast_pw:'',unterschrift:'',unterschrift_name:'',unterschrift_datum:'',geraete:[neuesGeraet(d)],geaendert:Date.now(),exportiert:0}}
 function vorlagen(){const v=ls('vorlagen');return v&&typeof v==='object'?v:JSON.parse(JSON.stringify(STANDARD_VORLAGEN))}
 
 let cur=null,curG=0,speicherTimer=null,curT=null,ansicht='liste';
@@ -455,7 +462,10 @@ function zeigeEdit(neuAnzeigen){
       h('div',{class:'card'},
         feld('Kunde *',cur,'kunde'),
         feld('Firma *',cur,'firma',{list:'dl-firmen',on:i=>{$('#titel').textContent=i.value||'Neue Einrichtung'}}),
+        feld('Kundennr.',cur,'kundennr'),
         feld('Datum',cur,'datum',{type:'date'}),
+        h('div',{class:'grid2',style:'grid-template-columns:minmax(0,1fr) minmax(0,1fr)'},
+          feld('Auftragsdatum',cur,'auftragsdatum',{type:'date'}),feld('Lieferdatum',cur,'lieferdatum',{type:'date'})),
         gastBlock()),
       h('div',{id:'chips'}),h('div',{id:'dev'}),
       bereich('Übergabe: Unterschrift des Kunden',[unterschriftBlock()],!!cur.unterschrift)),
@@ -472,7 +482,7 @@ function chipsZeichnen(){
 
 function geraetNeu(){
   const g=neuesGeraet(cur.datum||heute());
-  if(cur.geraete.length&&confirm('Einstellungen vom ersten Gerät übernehmen?\n\nÜbernommen werden Typ, Art, „Eingerichtet von“, Konfiguration, Programme, Fernwartungs-Tool und WLAN. Nicht: Namen, Passwörter, Zeiten, Seriennummer.')){
+  if(cur.geraete.length&&confirm('Einstellungen vom ersten Gerät übernehmen?\n\nÜbernommen werden Typ, Art, „Bearbeitet von“, Konfiguration, Programme, Fernwartungs-Tool und WLAN. Nicht: Namen, Passwörter, Zeiten, Seriennummer, Artikelnummer.')){
     const q=cur.geraete[0];for(const k of UEBERNEHMEN)g[k]=JSON.parse(JSON.stringify(q[k]==null?'':q[k]))}
   cur.geraete.push(g);curG=cur.geraete.length-1;speichern();chipsZeichnen();geraetZeichnen()}
 
@@ -524,10 +534,10 @@ function geraetZeichnen(){
   const kontenZeichnen=()=>{ersetze(konten,
     g.konten.map((k,i)=>h('div',{class:'eintrag'},
       auswahl('Art',k,'art',KONTO_ARTEN),
-      feld('Eingebunden in / für (z. B. Outlook)',k,'programm'),
-      feld('Adresse / Benutzername',k,'name'),
-      feld('Passwort',k,'passwort',{secret:true}),
       feld('Kontotyp / Server',k,'typ',{list:'dl-ktyp'}),
+      feld('Adresse / Benutzername',k,'name'),
+      feld('Eingebunden in / für (z. B. Outlook)',k,'programm'),
+      feld('Passwort',k,'passwort',{secret:true}),
       feld('Bemerkung',k,'bemerkung'),
       h('button',{class:'btn klein danger',onclick:()=>{g.konten.splice(i,1);speichern();kontenZeichnen()}},'Konto entfernen'))),
     h('button',{class:'btn klein',onclick:()=>{g.konten.push({art:'E-Mail',programm:'',name:'',passwort:'',typ:'',bemerkung:''});speichern();kontenZeichnen()}},'＋ Konto'))};
@@ -611,12 +621,43 @@ function geraetZeichnen(){
   const kabel=tabelle(g.verkabelung,KABEL_SPALTEN,'Verbindung',{v_kabel:'Cat6'},{v_kabel:'dl-kabel'});
   const tel=tabelle(g.telefonie,TEL_SPALTEN,'Telefon',{t_geraet:'Tischtelefon'},{t_geraet:'dl-telg'});
 
+  /* Netzlaufwerke als Liste (Buchstabe, Name, UNC-Pfad); die Liste entsteht erst mit dem ersten Eintrag */
+  const nlBox=h('div',{id:'netzlaufwerke'});
+  const nlZeichnen=()=>{const arr=Array.isArray(g.netzlaufwerke_liste)?g.netzlaufwerke_liste:[];ersetze(nlBox,
+    arr.map((x,i)=>h('div',{class:'eintrag'},
+      NL_SPALTEN.map(([k,l])=>feld(l,x,k)),
+      h('button',{type:'button',class:'btn klein danger',onclick:()=>{arr.splice(i,1);speichern();nlZeichnen()}},'Netzlaufwerk entfernen'))),
+    h('button',{type:'button',class:'btn klein',onclick:()=>{g.netzlaufwerke_liste=arr;arr.push({buchstabe:'',name:'',unc:''});speichern();nlZeichnen()}},'＋ Netzlaufwerk'))};
+  nlZeichnen();
+
+  /* NinjaOne Remote nur setzbar, wenn NinjaOne installiert ist (wie Desktop) */
+  const remote=haken('NinjaOne Remote',g,'ninja_remote');remote.style.paddingLeft='36px';
+  const remoteI=remote.querySelector('input');
+  const ninjaAkt=()=>{if(!g.ninjaone&&g.ninja_remote)g.ninja_remote=false;
+    remoteI.checked=!!g.ninja_remote;remoteI.disabled=!g.ninjaone;remote.style.opacity=g.ninjaone?'':'.5'};
+  const ninja=haken('NinjaOne installiert',g,'ninjaone',ninjaAkt);ninjaAkt();
+
+  /* Entsperrcode: Feld nur mit Haken; vorhandener Code = Haken gesetzt, Haken weg löscht den Code nach Rückfrage */
+  const codeBox=h('div',{});let codeAn=!!g.entsperrcode;
+  const codeZeichnen=()=>{const c=h('input',{type:'checkbox'});c.checked=codeAn;
+    c.addEventListener('change',()=>{
+      if(!c.checked&&g.entsperrcode){
+        if(!confirm('Entsperrcode löschen?\nDer gespeicherte Code wird entfernt.')){c.checked=true;return}
+        g.entsperrcode='';speichern()}
+      codeAn=c.checked;codeZeichnen()});
+    ersetze(codeBox,h('label',{class:'check'},c,'Entsperrcode'),codeAn?feld('Code',g,'entsperrcode',{secret:true}):null)};
+  codeZeichnen();
+
+  const mitSystem=istWindows||g.windows_version||g.updates||g.energiemodus||g.hoechstleistung;
   box.replaceChildren(
+    /* Reihenfolge wie die Unterreiter am Desktop: Gerät & Zeit · System & Netzwerk · Programme & Konten ·
+       Router & Fotos · Vor Ort, Rack & Telefonie · Checkliste & Altgerät */
     bereich('Gerät',[typ,
-      feld('Bezeichnung',g,'bezeichnung',{on:titelAkt}),ohneClient?null:feld('Client-Name',g,'client_name'),feld('Für wen',g,'fuer_wen'),
+      feld('Bezeichnung / Hersteller',g,'bezeichnung',{on:titelAkt}),ohneClient?null:feld('Client-Name',g,'client_name'),feld('Für wen',g,'fuer_wen'),
       auswahl('Art',g,'art',ARTEN),
-      feld('Eingerichtet von',g,'eingerichtet_von',{on:i=>ls('eingerichtet_von',i.value)}),
-      feld('Modell / Seriennummer',g,'modell',{scan:true}),ohneClient?null:feld('Entsperrcode',g,'entsperrcode',{secret:true})],true),
+      feld('Bearbeitet von',g,'eingerichtet_von',{on:i=>ls('eingerichtet_von',i.value)}),
+      feld('Seriennummer',g,'modell',{scan:true}),feld('Artikelnummer',g,'artikelnr'),
+      ohneClient?null:codeBox],true),
     bereich('Zeit',[
       feld('Datum',g,'datum',{type:'date'}),
       h('div',{class:'grid2'},feld('Von',g,'von',{type:'time',on:dauerAkt}),feld('Bis',g,'bis',{type:'time',on:dauerAkt})),
@@ -626,20 +667,15 @@ function geraetZeichnen(){
       feld('Dauer von Hand (z. B. 1:30 oder 90)',g,'dauer',{on:dauerAkt,mode:'text'}),dauerAnzeige,
       ],false),
     bereich('Konfiguration',[
-      auswahl('Stand',g,'grundkonfig',KONFIG),haken('NinjaOne installiert',g,'ninjaone'),haken('ESET installiert',g,'eset'),
+      auswahl('Stand',g,'grundkonfig',KONFIG),ninja,remote,haken('ESET installiert',g,'eset'),
       feld('Was wurde konfiguriert?',g,'grundkonfig_notiz',{area:true})],false),
-    ...(istWindows||g.windows_version||g.updates?[bereich('Updates und Sicherheit',[
-      feld('Windows-Version',g,'windows_version'),haken('Windows-Updates durchgeführt',g,'updates')],!!(g.windows_version||g.updates))]:[]),
-    bereich('Vor Ort durchgeführt',[vo],g.vorort.length>0||g.typ==='Serverschrank / Rack'),
-    bereich('Serverschrank / Rack',[feld('Standort / Raum',g,'rack_standort'),feld('Größe (z. B. 19″, 12 HE)',g,'rack_groesse'),
-      feld('Bemerkung',g,'rack_notiz'),h('div',{class:'gruppe'},'Komponenten (von oben nach unten)'),komp,
-      h('div',{class:'gruppe'},'Verkabelung'),kabel],g.komponenten.length>0||g.typ==='Serverschrank / Rack'),
-    bereich('Telefonie',[feld('Telefonanlage (z. B. Starface, 3CX)',g,'tel_anlage'),feld('Provider (z. B. Easybell)',g,'tel_provider'),
-      feld('Rufnummern (eine Zeile pro Nummer)',g,'tel_rufnummern',{area:true,rows:3}),h('div',{class:'gruppe'},'Telefone und Benutzer'),tel],
-      !!(g.tel_anlage||g.telefonie.length)),
-    bereich('Checkliste',[cl],(g.checkliste||[]).length>0),
-    bereich('Programme',[software],false),
-    bereich('Konten',[konten],false),
+    bereich('Notizen',[feld('Notizen',g,'notizen',{area:true,rows:4})],false),
+    ...(mitSystem?[bereich('Updates und Sicherheit',[
+      feld('Windows-Version',g,'windows_version'),
+      h('div',{class:'gruppe'},'Systemeinstellungen'),
+      haken('Windows-Updates durchgeführt',g,'updates'),
+      haken('Energiemodus eingestellt',g,'energiemodus'),haken('Höchstleistung an',g,'hoechstleistung')],
+      !!(g.windows_version||g.updates||g.energiemodus||g.hoechstleistung))]:[]),
     bereich('Netzwerk und Fernwartung',[
       feld('Hostname',g,'hostname'),feld('IP-Adresse',g,'ip'),istNetz?null:feld('WLAN',g,'wlan'),
       feld('DNS-Server',g,'dns'),feld('VLAN',g,'vlan'),istNetz?feld('Firmware-Version',g,'firmware'):null,
@@ -648,8 +684,25 @@ function geraetZeichnen(){
     bereich('Domäne und Netzlaufwerke',[
       haken('Domäne beigetreten',g,'dom_beigetreten'),feld('Domäne / Arbeitsgruppe',g,'domaene'),
       feld('Organisationseinheit (OU)',g,'dom_ou'),feld('Domänenbenutzer',g,'dom_benutzer'),
-      feld('Netzlaufwerke (eine Zeile pro Laufwerk)',g,'netzlaufwerke',{area:true,rows:3})],
-      !!(g.dom_beigetreten||g.domaene||g.dom_ou||g.dom_benutzer||g.netzlaufwerke)),
+      h('div',{class:'gruppe'},'Netzlaufwerke'),nlBox,
+      feld('Bemerkung',g,'netzlaufwerke',{area:true,rows:3})],
+      !!(g.dom_beigetreten||g.domaene||g.dom_ou||g.dom_benutzer||g.netzlaufwerke||(g.netzlaufwerke_liste||[]).length)),
+    bereich('Programme',[software],false),
+    bereich('Konten',[konten],false),
+    bereich('Router / Netzwerkgerät',[
+      feld('Admin-Benutzer',g,'router_admin'),feld('Admin-Passwort',g,'router_admin_pw',{secret:true}),
+      feld('WLAN-Name (Hauptnetz)',g,'wlan_name'),feld('WLAN-Passwort (Hauptnetz)',g,'wlan_pw',{secret:true}),
+      feld('IP-Bereich',g,'ip_bereich'),feld('DHCP',g,'dhcp'),
+      feld('Port-Freigaben (eine Zeile pro Freigabe)',g,'portfreigaben',{area:true,rows:4})],istNetz),
+    bereich('Fotos',[fotos],false),
+    bereich('Vor Ort durchgeführt',[vo],g.vorort.length>0||g.typ==='Serverschrank / Rack'),
+    bereich('Telefonie',[feld('Telefonanlage (z. B. Starface, 3CX)',g,'tel_anlage'),feld('Provider (z. B. Easybell)',g,'tel_provider'),
+      feld('Rufnummern (eine Zeile pro Nummer)',g,'tel_rufnummern',{area:true,rows:3}),h('div',{class:'gruppe'},'Telefone und Benutzer'),tel],
+      !!(g.tel_anlage||g.telefonie.length)),
+    bereich('Serverschrank / Rack',[feld('Standort / Raum',g,'rack_standort'),feld('Größe (z. B. 19″, 12 HE)',g,'rack_groesse'),
+      feld('Bemerkung',g,'rack_notiz'),h('div',{class:'gruppe'},'Komponenten (von oben nach unten)'),komp,
+      h('div',{class:'gruppe'},'Verkabelung'),kabel],g.komponenten.length>0||g.typ==='Serverschrank / Rack'),
+    bereich('Checkliste',[cl],(g.checkliste||[]).length>0),
     bereich('Altgerät und Entsorgung',[
       feld('Altgerät',g,'alt_bezeichnung'),
       feld('Seriennummer Altgerät',g,'alt_sn',{scan:true}),
@@ -657,13 +710,6 @@ function geraetZeichnen(){
       feld('Gelöscht am',g,'alt_loeschdatum',{type:'date'}),feld('Entsorgung',g,'alt_entsorgung',{list:'dl-es'}),
       feld('Übergeben an',g,'alt_uebergeben_an'),feld('Bemerkung',g,'alt_notiz',{area:true})],
       !!(g.alt_bezeichnung||g.alt_sn||g.alt_loeschmethode)),
-    bereich('Router / Netzwerkgerät',[
-      feld('Admin-Benutzer',g,'router_admin'),feld('Admin-Passwort',g,'router_admin_pw',{secret:true}),
-      feld('WLAN-Name (Hauptnetz)',g,'wlan_name'),feld('WLAN-Passwort (Hauptnetz)',g,'wlan_pw',{secret:true}),
-      feld('IP-Bereich',g,'ip_bereich'),feld('DHCP',g,'dhcp'),
-      feld('Port-Freigaben (eine Zeile pro Freigabe)',g,'portfreigaben',{area:true,rows:4})],istNetz),
-    bereich('Fotos',[fotos],false),
-    bereich('Notizen',[feld('Notizen',g,'notizen',{area:true,rows:4})],false),
     h('div',{class:'row',style:'margin-top:4px'},
       h('button',{class:'btn klein danger',onclick:geraetEntfernen},'Dieses Gerät entfernen')));
   dauerAkt()}
@@ -683,15 +729,21 @@ async function fotosHinzu(ev,g,neuZeichnen,max=1280,qual=0.8){
   speichern();neuZeichnen()}
 
 /* ---------- Export und Import ---------- */
+/* Neue Schlüssel nur übernehmen, wenn vorhanden (ältere Einträge haben sie nicht); Werte als Text */
+const nurVorhandene=(obj,keys)=>{const r={};for(const k of keys)if(k in obj)r[k]=obj[k]==null?'':String(obj[k]);return r};
 function exportObjekt(e){return {format:'dats-mobil',version:1,exportiert:new Date().toISOString(),
-  einrichtung:{uid:e.uid,kunde:e.kunde,firma:e.firma,datum:e.datum,gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',unterschrift:e.unterschrift||'',unterschrift_name:e.unterschrift_name||'',unterschrift_datum:e.unterschrift_datum||'',geraete:e.geraete.map(g=>{
+  einrichtung:{uid:e.uid,kunde:e.kunde,firma:e.firma,datum:e.datum,...nurVorhandene(e,KOPF_NEU),gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',unterschrift:e.unterschrift||'',unterschrift_name:e.unterschrift_name||'',unterschrift_datum:e.unterschrift_datum||'',geraete:e.geraete.map(g=>{
     const o={uid:g.uid};for(const k of FELDER)o[k]=g[k]==null?'':g[k];
     const m=parseDauer(g.dauer);o.dauer=m!=null?String(m):'';
-    for(const k of HAKEN)o[k]=!!g[k];o.checkliste=(g.checkliste||[]).filter(p=>(p.text||'').trim()).map(p=>({text:p.text,ok:!!p.ok}));
+    for(const k of HAKEN)o[k]=!!g[k];
+    Object.assign(o,nurVorhandene(g,FELDER_NEU));for(const k of HAKEN_NEU)if(k in g)o[k]=!!g[k];
+    if('ninja_remote' in o)o.ninja_remote=o.ninja_remote&&!!g.ninjaone;
+    o.checkliste=(g.checkliste||[]).filter(p=>(p.text||'').trim()).map(p=>({text:p.text,ok:!!p.ok}));
     o.software=g.software.filter(s=>(s.programm||'').trim());o.konten=g.konten;
     o.vorort=(g.vorort||[]).filter(p=>(p.text||'').trim());
     const nl=(a,sp)=>(a||[]).filter(x=>sp.some(([k])=>(x[k]||'').trim())).map(x=>{const r={};for(const [k] of sp)r[k]=x[k]||'';return r});
     o.komponenten=nl(g.komponenten,KOMP_SPALTEN);o.verkabelung=nl(g.verkabelung,KABEL_SPALTEN);o.telefonie=nl(g.telefonie,TEL_SPALTEN);
+    if(Array.isArray(g.netzlaufwerke_liste))o.netzlaufwerke_liste=nl(g.netzlaufwerke_liste,NL_SPALTEN);
     o.fotos=g.fotos.map(f=>({id:f.id,text:f.text||'',daten:f.daten}));return o})}}}
 function dateiName(e){const s=t=>String(t||'').normalize('NFKD').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_').slice(0,40)||'x';
   return 'Einrichtung_'+s(e.firma)+'_'+(e.datum||heute())+'.json'}
@@ -703,6 +755,15 @@ async function exportieren(){
   const a=h('a',{href:URL.createObjectURL(blob),download:name});document.body.append(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
   toast('Exportiert: '+name)}
+/* Import vom PC: neue Schlüssel, die in der Datei fehlen, nicht mit Vorgaben füllen (sonst würden sie beim nächsten
+   Export den Wert am PC leeren); Netzlaufwerke als Liste von Texten */
+function neueAusDatei(neu,g){
+  for(const k of [...FELDER_NEU,...HAKEN_NEU,'netzlaufwerke_liste'])if(!(k in g))delete neu[k];
+  for(const k of FELDER_NEU)if(k in neu)neu[k]=neu[k]==null?'':String(neu[k]);
+  for(const k of HAKEN_NEU)if(k in neu)neu[k]=!!neu[k];
+  if('netzlaufwerke_liste' in neu)neu.netzlaufwerke_liste=(Array.isArray(g.netzlaufwerke_liste)?g.netzlaufwerke_liste:[])
+    .filter(x=>x&&typeof x==='object').map(x=>{const r={};for(const [k] of NL_SPALTEN)r[k]=x[k]==null?'':String(x[k]);return r});
+  return neu}
 async function dateienEinlesen(ev){
   const dateien=[...ev.target.files];ev.target.value='';let n=0;
   for(const d of dateien){try{const o=JSON.parse(await d.text());
@@ -710,9 +771,9 @@ async function dateienEinlesen(ev){
       if(o.format!=='dats-mobil'||!o.einrichtung)throw new Error('falsches Format');
       const e=o.einrichtung;const vorh=((await alle())||[]).find(x=>x.uid===e.uid);
       if(vorh&&!confirm('„'+(e.firma||'ohne Firma')+'“ ist schon auf diesem Handy. Überschreiben?'))continue;
-      await sichern({uid:e.uid,kunde:e.kunde||'',firma:e.firma||'',datum:e.datum||heute(),gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',unterschrift:e.unterschrift||'',unterschrift_name:e.unterschrift_name||'',unterschrift_datum:e.unterschrift_datum||'',geaendert:Date.now(),exportiert:Date.now(),
-        geraete:(e.geraete||[]).map(g=>Object.assign(neuesGeraet(e.datum||heute()),g,{
-          software:g.software||[],konten:g.konten||[],fotos:g.fotos||[],checkliste:g.checkliste||[]}))});n++}
+      await sichern({uid:e.uid,kunde:e.kunde||'',firma:e.firma||'',datum:e.datum||heute(),...nurVorhandene(e,KOPF_NEU),gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',unterschrift:e.unterschrift||'',unterschrift_name:e.unterschrift_name||'',unterschrift_datum:e.unterschrift_datum||'',geaendert:Date.now(),exportiert:Date.now(),
+        geraete:(e.geraete||[]).map(g=>neueAusDatei(Object.assign(neuesGeraet(e.datum||heute()),g,{
+          software:g.software||[],konten:g.konten||[],fotos:g.fotos||[],checkliste:g.checkliste||[]}),g))});n++}
     catch(err){toast('„'+d.name+'“ nicht lesbar')}}
   if(n>0)toast(n+' Einrichtung(en) geladen');zeigeListe()}
 
