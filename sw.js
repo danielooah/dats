@@ -1,6 +1,6 @@
 /* DaTs Mobil – Offline-Zwischenspeicher. Es werden nur die App-Dateien gespeichert,
    niemals Kundendaten (die liegen ausschließlich in der Datenbank des Browsers). */
-const VERSION = 'dats-mobil-17';
+const VERSION = 'dats-mobil-18';
 const DATEIEN = ['./', 'index.html', 'manifest.webmanifest',
                  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
 

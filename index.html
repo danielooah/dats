@@ -363,7 +363,7 @@ function neuesGeraet(datum){return {uid:neueId(),bezeichnung:'',client_name:'',f
   dom_beigetreten:false,dom_ou:'',dom_benutzer:'',domaene:'',netzlaufwerke:'',dns:'',vlan:'',firmware:'',config_gesichert:false,checkliste_name:'',checkliste:[],
   rack_standort:'',rack_groesse:'',rack_notiz:'',tel_anlage:'',tel_provider:'',tel_rufnummern:'',vorort:[],komponenten:[],verkabelung:[],telefonie:[],
   software:[],konten:[],fotos:[],artikelnr:'',ninja_remote:false,energiemodus:false,hoechstleistung:false,netzlaufwerke_liste:[]}}
-function neueEinrichtung(firma){const d=heute();return {uid:neueId(),kunde:'',firma:firma||'',datum:d,kundennr:'',auftragsdatum:'',lieferdatum:'',gast_wlan:false,gast_ssid:'',gast_pw:'',unterschrift:'',unterschrift_name:'',unterschrift_datum:'',geraete:[neuesGeraet(d)],geaendert:Date.now(),exportiert:0}}
+function neueEinrichtung(firma){const d=heute();return {uid:neueId(),kunde:'',firma:firma||'',adresse:'',datum:d,kundennr:'',auftragsdatum:'',lieferdatum:'',gast_wlan:false,gast_ssid:'',gast_pw:'',unterschrift:'',unterschrift_name:'',unterschrift_datum:'',geraete:[neuesGeraet(d)],geaendert:Date.now(),exportiert:0}}
 function vorlagen(){const v=ls('vorlagen');return v&&typeof v==='object'?v:JSON.parse(JSON.stringify(STANDARD_VORLAGEN))}
 
 let cur=null,curG=0,speicherTimer=null,curT=null,ansicht='liste';
@@ -416,7 +416,7 @@ async function zeigeListe(){
         const angefangen=e.geraete.some(g=>g.grundkonfig!=='Nicht begonnen');
         return h('button',{class:'karte-liste '+(fertig?'fertig':angefangen?'offen':''),onclick:()=>oeffne(e.uid)},
           h('b',{},e.firma||'(ohne Firma)'),
-          h('span',{class:'hinweis'},[e.kunde,de(e.datum),e.geraete.length+' Gerät(e)'].filter(Boolean).join(' · ')),' ',
+          h('span',{class:'hinweis'},[(e.kunde||'').trim(),de(e.datum),e.geraete.length+' Gerät(e)'].filter(Boolean).join(' · ')),' ',
           e.geaendert>(e.exportiert||0)?h('span',{class:'badge warn'},'nicht exportiert'):h('span',{class:'badge ok'},'exportiert'))})
       :h('div',{class:'leer'},'Noch keine Einrichtungen.',h('br'),'Tippe unten auf „Neue Einrichtung“.'),
       h('div',{class:'row',style:'margin-top:8px'},
@@ -460,8 +460,9 @@ function zeigeEdit(neuAnzeigen){
       h('button',{class:'icon',title:'Löschen',onclick:einrLoeschen,'aria-label':'Einrichtung löschen'},ikon('papierkorb'))),
     h('div',{class:'wrap'},
       h('div',{class:'card'},
-        feld('Kunde *',cur,'kunde'),
+        feld('Kunde',cur,'kunde'),
         feld('Firma *',cur,'firma',{list:'dl-firmen',on:i=>{$('#titel').textContent=i.value||'Neue Einrichtung'}}),
+        feld('Adresse',cur,'adresse',{area:true,rows:3}),
         feld('Kundennr.',cur,'kundennr'),
         feld('Datum',cur,'datum',{type:'date'}),
         h('div',{class:'grid2',style:'grid-template-columns:minmax(0,1fr) minmax(0,1fr)'},
@@ -732,7 +733,7 @@ async function fotosHinzu(ev,g,neuZeichnen,max=1280,qual=0.8){
 /* Neue Schlüssel nur übernehmen, wenn vorhanden (ältere Einträge haben sie nicht); Werte als Text */
 const nurVorhandene=(obj,keys)=>{const r={};for(const k of keys)if(k in obj)r[k]=obj[k]==null?'':String(obj[k]);return r};
 function exportObjekt(e){return {format:'dats-mobil',version:1,exportiert:new Date().toISOString(),
-  einrichtung:{uid:e.uid,kunde:e.kunde,firma:e.firma,datum:e.datum,...nurVorhandene(e,KOPF_NEU),gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',unterschrift:e.unterschrift||'',unterschrift_name:e.unterschrift_name||'',unterschrift_datum:e.unterschrift_datum||'',geraete:e.geraete.map(g=>{
+  einrichtung:{uid:e.uid,kunde:e.kunde||'',firma:e.firma,...('adresse' in e?{adresse:e.adresse==null?'':String(e.adresse).replace(/\r\n/g,'\n')}:{}),datum:e.datum,...nurVorhandene(e,KOPF_NEU),gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',unterschrift:e.unterschrift||'',unterschrift_name:e.unterschrift_name||'',unterschrift_datum:e.unterschrift_datum||'',geraete:e.geraete.map(g=>{
     const o={uid:g.uid};for(const k of FELDER)o[k]=g[k]==null?'':g[k];
     const m=parseDauer(g.dauer);o.dauer=m!=null?String(m):'';
     for(const k of HAKEN)o[k]=!!g[k];
@@ -748,7 +749,7 @@ function exportObjekt(e){return {format:'dats-mobil',version:1,exportiert:new Da
 function dateiName(e){const s=t=>String(t||'').normalize('NFKD').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_').slice(0,40)||'x';
   return 'Einrichtung_'+s(e.firma)+'_'+(e.datum||heute())+'.json'}
 async function exportieren(){
-  if(!cur.firma.trim()||!cur.kunde.trim()){toast('Bitte Kunde und Firma eintragen');return}
+  if(!(cur.firma||'').trim()){toast('Bitte Firma eintragen');return}
   const name=dateiName(cur);
   const blob=new Blob([JSON.stringify(exportObjekt(cur))],{type:'application/json'});
   cur.exportiert=Date.now();cur.geaendert=Math.min(cur.geaendert,cur.exportiert);await sofortSpeichern();
@@ -771,7 +772,7 @@ async function dateienEinlesen(ev){
       if(o.format!=='dats-mobil'||!o.einrichtung)throw new Error('falsches Format');
       const e=o.einrichtung;const vorh=((await alle())||[]).find(x=>x.uid===e.uid);
       if(vorh&&!confirm('„'+(e.firma||'ohne Firma')+'“ ist schon auf diesem Handy. Überschreiben?'))continue;
-      await sichern({uid:e.uid,kunde:e.kunde||'',firma:e.firma||'',datum:e.datum||heute(),...nurVorhandene(e,KOPF_NEU),gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',unterschrift:e.unterschrift||'',unterschrift_name:e.unterschrift_name||'',unterschrift_datum:e.unterschrift_datum||'',geaendert:Date.now(),exportiert:Date.now(),
+      await sichern({uid:e.uid,kunde:e.kunde||'',firma:e.firma||'',adresse:e.adresse==null?'':String(e.adresse).replace(/\r\n/g,'\n'),datum:e.datum||heute(),...nurVorhandene(e,KOPF_NEU),gast_wlan:!!e.gast_wlan,gast_ssid:e.gast_ssid||'',gast_pw:e.gast_pw||'',unterschrift:e.unterschrift||'',unterschrift_name:e.unterschrift_name||'',unterschrift_datum:e.unterschrift_datum||'',geaendert:Date.now(),exportiert:Date.now(),
         geraete:(e.geraete||[]).map(g=>neueAusDatei(Object.assign(neuesGeraet(e.datum||heute()),g,{
           software:g.software||[],konten:g.konten||[],fotos:g.fotos||[],checkliste:g.checkliste||[]}),g))});n++}
     catch(err){toast('„'+d.name+'“ nicht lesbar')}}
